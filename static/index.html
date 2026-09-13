@@ -13,43 +13,49 @@
       <div>
         <div class="eyebrow">LOCAL AI CONTROL CENTER</div>
         <h1>AI Quota</h1>
-        <p>Live quota, reset timers, token usage and account health in one place.</p>
+        <p>All accounts. Last-known quota. Live reset timers. No random account testing.</p>
       </div>
       <div class="top-actions">
         <div class="live-clock"><span class="live-dot"></span><span id="localClock">—</span></div>
-        <button id="refresh" class="button">Refresh now</button>
+        <button id="sync" class="button">Sync now</button>
+        <button id="addAccount" class="button primary">+ Add account</button>
       </div>
     </header>
 
-    <section class="stats">
-      <article><span>Accounts</span><strong id="accountCount">0</strong></article>
-      <article><span>Live quota windows</span><strong id="windowCount">0</strong></article>
-      <article><span>Last data sync</span><strong id="lastSync">—</strong></article>
+    <section class="hero-grid">
+      <article class="hero-card best-card">
+        <div class="label">BEST AVAILABLE</div>
+        <div id="bestAccount">No live quota yet</div>
+        <small id="bestDetails">Connect your Antigravity CLI account(s) to populate live data.</small>
+      </article>
+      <article class="hero-card"><span class="label">ACCOUNTS</span><strong id="accountCount">0</strong><small id="accountStates">0 live · 0 stale · 0 not connected</small></article>
+      <article class="hero-card"><span class="label">LIVE SOURCES</span><strong id="liveCount">0</strong><small>Provider telemetry seen in the last 60 seconds.</small></article>
     </section>
 
-    <section class="panel">
+    <section class="panel account-panel">
       <div class="panel-head">
-        <div><h2>Accounts</h2><p>Only metadata is stored here. Live provider data arrives through local integrations.</p></div>
-        <button id="addAccount" class="button primary">+ Add account</button>
+        <div>
+          <h2>Accounts</h2>
+          <p>Each email is independent. A live provider payload is matched to the reported email automatically.</p>
+        </div>
+        <div class="legend"><span class="dot green"></span> live <span class="dot yellow"></span> stale <span class="dot gray"></span> not connected <span class="dot red"></span> exhausted</div>
       </div>
       <div id="accounts" class="accounts"></div>
     </section>
 
     <section class="panel">
-      <div class="panel-head">
-        <div><h2>Live quotas</h2><p>Countdowns update every second. Values come from connected provider telemetry.</p></div>
+      <div class="panel-head"><div><h2>What AI Quota knows</h2><p>Unknown is shown as unknown. We never invent a quota value.</p></div></div>
+      <div class="info-grid">
+        <div><strong>Antigravity CLI</strong><span>Live collector available through the official status-line JSON payload.</span></div>
+        <div><strong>Antigravity IDE</strong><span>Tracked as a separate client. Direct live collector is not claimed unless a supported telemetry source is available.</span></div>
+        <div><strong>VS Code / Copilot</strong><span>Separate provider adapter. Last-known data can be stored without pretending it is live.</span></div>
+        <div><strong>Credits</strong><span>Displayed only when a provider collector supplies a real balance.</span></div>
       </div>
-      <div id="quotaCards" class="quota-cards"></div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head"><div><h2>Detailed history</h2><p>Captured quota windows are kept locally for history and trend views.</p></div></div>
-      <div id="snapshots" class="table-wrap"></div>
     </section>
 
     <section class="security">
-      <strong>Security boundary</strong>
-      <span>AI Quota is localhost-only. It never asks for passwords, session cookies, OAuth refresh tokens or API keys.</span>
+      <strong>Local-only security boundary</strong>
+      <span>AI Quota binds to 127.0.0.1. It stores quota metadata locally. Never enter passwords, browser cookies, session tokens, or API keys into this dashboard.</span>
     </section>
   </main>
 
@@ -57,10 +63,18 @@
     <form method="dialog" id="accountForm">
       <h2>Add account</h2>
       <label>Email<input name="email" type="email" required maxlength="320" placeholder="you@example.com"></label>
-      <label>Provider<input name="provider" required maxlength="80" value="Antigravity"></label>
-      <label>Display name<input name="display_name" maxlength="120" placeholder="Working account"></label>
-      <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save</button></div>
+      <label>Provider<select name="provider"><option>Antigravity</option><option>Gemini API</option><option>Google Cloud</option><option>GitHub Copilot</option><option>OpenAI / Codex</option><option>Other</option></select></label>
+      <label>Client<select name="client"><option>Antigravity CLI</option><option>Antigravity IDE</option><option>VS Code</option><option>GitHub Copilot</option><option>Gemini API</option><option>Google Cloud</option><option>Codex</option><option>Other</option></select></label>
+      <label>Display name<input name="display_name" maxlength="120" placeholder="Personal / Work / Account 01"></label>
+      <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save account</button></div>
     </form>
+  </dialog>
+
+  <dialog id="detailDialog">
+    <div class="detail-dialog">
+      <div class="detail-head"><div><div id="detailName" class="detail-name">Account</div><div id="detailMeta" class="detail-meta"></div></div><button id="closeDetail" class="button">Close</button></div>
+      <div id="detailBody"></div>
+    </div>
   </dialog>
 
   <script src="/static/app.js"></script>
