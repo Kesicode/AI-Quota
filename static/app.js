@@ -7,12 +7,12 @@ let refreshTimer;
 let pendingDeleteId = null;
 
 const PROVIDERS = {
-  'cloud code / cloud shell': {key:'cloud_code', label:'Cloud Code / Cloud Shell', priority:100, live:false, truth:'official UI-derived', note:'Cloud Code weekly usage is separate from Gemini and Google Cloud project quotas.'},
-  'google cloud quotas': {key:'google_cloud', label:'Google Cloud quotas', priority:90, live:false, truth:'official API/CLI-derived', note:'Project/service quotas are a different data class from Cloud Code weekly hours.'},
-  'openai / codex': {key:'codex', label:'OpenAI / Codex', priority:80, live:false, truth:'supported provider surface', note:'Codex usage and API usage are separate authorities.'},
-  'antigravity': {key:'antigravity', label:'Antigravity', priority:70, live:true, truth:'provider-local', note:'Live collectors are implemented for supported Antigravity surfaces.'},
-  'gemini api': {key:'gemini', label:'Gemini API', priority:60, live:false, truth:'project/API-derived', note:'Do not use Gemini API values as Cloud Code values.'},
-  'github copilot': {key:'copilot', label:'GitHub Copilot', priority:50, live:false, truth:'provider surface', note:'Usage/credits depend on current Copilot plan and supported surfaces.'},
+  cloud_code: {key:'cloud_code', label:'Cloud Code / Cloud Shell', priority:100, live:false, truth:'official UI-derived', note:'Cloud Code weekly usage is separate from Gemini and Google Cloud project quotas.'},
+  google_cloud: {key:'google_cloud', label:'Google Cloud quotas', priority:90, live:false, truth:'official API/CLI-derived', note:'Project/service quotas are a different data class from Cloud Code weekly hours.'},
+  codex: {key:'codex', label:'OpenAI / Codex', priority:80, live:false, truth:'supported provider surface', note:'Codex usage and API usage are separate authorities.'},
+  antigravity: {key:'antigravity', label:'Antigravity', priority:70, live:true, truth:'provider-local', note:'Live collectors are implemented for supported Antigravity surfaces.'},
+  gemini: {key:'gemini', label:'Gemini API', priority:60, live:false, truth:'project/API-derived', note:'Do not use Gemini API values as Cloud Code values.'},
+  copilot: {key:'copilot', label:'GitHub Copilot', priority:50, live:false, truth:'provider surface', note:'Usage/credits depend on current Copilot plan and supported surfaces.'},
 };
 
 async function api(url, options = {}) {
@@ -50,9 +50,17 @@ function resetInfo(resetAt) {
 }
 
 function providerMeta(account) {
-  const key = String(account.provider || '').trim().toLowerCase();
-  if (key === 'cloud code') return PROVIDERS['cloud code / cloud shell'];
-  return PROVIDERS[key] || {key:key || 'other', label:account.provider || 'Other', priority:10, live:false, truth:'unknown', note:'No authoritative collector is implemented yet.'};
+  const provider = String(account.provider || '').trim().toLowerCase();
+  const client = String(account.client || '').trim().toLowerCase();
+  if (client.includes('cloud code') || client.includes('cloud shell')) return PROVIDERS.cloud_code;
+  if (client.includes('google cloud quotas') || client.includes('project quota')) return PROVIDERS.google_cloud;
+  if (client.includes('codex') || provider === 'openai / codex') return PROVIDERS.codex;
+  if (provider === 'antigravity') return PROVIDERS.antigravity;
+  if (client.includes('gemini') || provider === 'gemini api') return PROVIDERS.gemini;
+  if (client.includes('copilot') || provider === 'github copilot') return PROVIDERS.copilot;
+  if (provider === 'cloud code') return PROVIDERS.cloud_code;
+  if (provider === 'google cloud') return PROVIDERS.google_cloud;
+  return {key:'other', label:account.provider || 'Other', priority:10, live:false, truth:'unknown', note:'No authoritative collector is implemented yet.'};
 }
 
 function clientKind(account) {
