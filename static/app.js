@@ -108,10 +108,10 @@ function renderSnapshots() {
 
 function updateLiveClock() {
   const now = new Date();
+  const clock = $('#localClock');
+  if (clock) clock.textContent = now.toLocaleTimeString();
 
-  if (lastSyncAt) {
-    $('#lastSync').textContent = lastSyncAt.toLocaleTimeString();
-  }
+  if (lastSyncAt) $('#lastSync').textContent = lastSyncAt.toLocaleTimeString();
 
   document.querySelectorAll('[data-reset]').forEach(el => {
     el.textContent = formatReset(el.dataset.reset);
@@ -136,9 +136,7 @@ async function load({silent = false} = {}) {
     updateLiveClock();
   } catch (e) {
     console.error(e);
-    if (!silent) {
-      alert(`Could not load AI Quota data: ${e.message}`);
-    }
+    if (!silent) alert(`Could not load AI Quota data: ${e.message}`);
   }
 }
 
@@ -192,21 +190,17 @@ $('#refresh').onclick = async () => {
 };
 
 function startLiveUpdates() {
-  if (!liveTimer) {
-    liveTimer = setInterval(updateLiveClock, 1000);
-  }
+  if (!liveTimer) liveTimer = setInterval(updateLiveClock, 1000);
 
   if (!refreshTimer) {
-    // Poll the local backend so provider-collected snapshots can appear without
-    // requiring a page reload. The countdown itself remains entirely local.
+    // Poll the local backend so newly collected provider snapshots appear
+    // without a browser reload. The countdown itself is calculated locally.
     refreshTimer = setInterval(() => load({silent: true}), 30000);
   }
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) {
-    load({silent: true});
-  }
+  if (!document.hidden) load({silent: true});
 });
 
 startLiveUpdates();
