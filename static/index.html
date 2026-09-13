@@ -27,7 +27,7 @@
       <article class="hero-card best-card">
         <div class="label">BEST AVAILABLE</div>
         <div id="bestAccount">No live quota yet</div>
-        <small id="bestDetails">Connect your provider account(s) to populate live data.</small>
+        <small id="bestDetails">Open Antigravity 2.0 or Antigravity CLI and press Sync now.</small>
       </article>
       <article class="hero-card"><span class="label">ACCOUNTS</span><strong id="accountCount">0</strong><small id="accountStates">0 live · 0 stale · 0 not connected</small></article>
       <article class="hero-card"><span class="label">LIVE SOURCES</span><strong id="liveCount">0</strong><small>Provider telemetry seen in the last 60 seconds.</small></article>
@@ -48,7 +48,7 @@
       <div class="panel-head"><div><h2>Provider / client coverage</h2><p>Clients are tracked separately. A client is never marked live unless AI Quota has an authoritative data source for it.</p></div></div>
       <div class="info-grid">
         <div><strong>Antigravity CLI</strong><span>Live collector through the official status-line JSON payload, including model quota, reset times, plan, account email and context token usage.</span></div>
-        <div><strong>Antigravity 2.0</strong><span>Supported as its own tracked client. Antigravity documents unified authentication and the Models &amp; Quota view, but does not document the CLI status-line protocol for the desktop app, so AI Quota will not fake a live reading here.</span></div>
+        <div><strong>Antigravity 2.0</strong><span>Live local collector probes the running desktop app's loopback language-server quota service and reads the same quota summary used by the Models &amp; Usage surface. It does not scrape screenshots or ask for passwords.</span></div>
         <div><strong>Antigravity IDE</strong><span>Tracked as a separate client. Live collection is only enabled once an authoritative local/provider surface exists.</span></div>
         <div><strong>VS Code / Copilot / Gemini / Cloud / Codex</strong><span>Separate provider adapters. Each source is shown independently and unknown values remain unknown.</span></div>
       </div>
