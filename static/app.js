@@ -4,6 +4,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>\"']/g, (c) => ({'&':'&amp;','<'
 let dashboard = {summary:{}, accounts:[], ranking:[]};
 let liveTimer = null;
 let refreshTimer = null;
+let pendingDeleteId = null;
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -53,17 +54,17 @@ function statusClass(status) {
   return ({live:'live', stale:'stale', not_connected:'not-connected', exhausted:'exhausted'}[status] || 'unknown');
 }
 
-function bestQuota(account) {
-  const candidates = (account.snapshots || []).filter(s => s.remaining_percent != null && s.window_name !== 'Context Window');
-  if (!candidates.length) return null;
-  return candidates.reduce((best, current) => Number(current.remaining_percent) > Number(best.remaining_percent) ? current : best);
-}
-
 function clientKind(account) {
   const client = String(account.client || '').toLowerCase();
   if (client.includes('antigravity 2.0')) return 'antigravity2';
   if (client.includes('cli')) return 'cli';
   return 'other';
+}
+
+function bestQuota(account) {
+  const candidates = (account.snapshots || []).filter(s => s.remaining_percent != null && s.window_name !== 'Context Window');
+  if (!candidates.length) return null;
+  return candidates.reduce((best, current) => Number(current.remaining_percent) > Number(best.remaining_percent) ? current : best);
 }
 
 function renderSummary() {
@@ -103,11 +104,37 @@ function renderQuotaRow(snapshot) {
   </div>`;
 }
 
+function filteredAccounts() {
+  const query = ($('#accountSearch')?.value || '').trim().toLowerCase();
+  const filter = $('#statusFilter')?.value || 'all';
+  const sort = $('#sortAccounts')?.value || 'best';
+  let accounts = [...(dashboard.accounts || [])];
+
+  if (query) {
+    accounts = accounts.filter(a => `${a.email} ${a.display_name || ''} ${a.provider || ''} ${a.client || ''}`.toLowerCase().includes(query));
+  }
+  if (filter !== 'all') accounts = accounts.filter(a => (a.status || 'not_connected') === filter);
+
+  const statusRank = {live: 4, stale: 3, not_connected: 2, exhausted: 1};
+  accounts.sort((a, b) => {
+    if (sort === 'name') return String(a.display_name || a.email).localeCompare(String(b.display_name || b.email));
+    if (sort === 'status') return (statusRank[b.status] || 0) - (statusRank[a.status] || 0);
+    if (sort === 'client') return String(a.client || '').localeCompare(String(b.client || ''));
+    return Number(b.best_remaining ?? -1) - Number(a.best_remaining ?? -1);
+  });
+  return accounts;
+}
+
 function renderAccounts() {
   const container = $('#accounts');
-  const accounts = dashboard.accounts || [];
-  if (!accounts.length) {
+  const accounts = filteredAccounts();
+  $('#visibleCount').textContent = `${accounts.length} shown`;
+  if (!dashboard.accounts?.length) {
     container.innerHTML = `<div class="empty">No accounts yet. Add your 10–15 accounts here.</div>`;
+    return;
+  }
+  if (!accounts.length) {
+    container.innerHTML = `<div class="empty">No accounts match your search/filter.</div>`;
     return;
   }
   container.innerHTML = accounts.map(account => {
@@ -135,11 +162,18 @@ function renderAccounts() {
         <div class="summary-box"><span>Credits</span><strong>${credits}</strong><small>Only shown when a real balance is collected</small></div>
         <div class="summary-box"><span>Context</span><strong>${context?.remaining_percent != null ? `${Number(context.remaining_percent).toFixed(1)}%` : '—'}</strong><small>${context?.used_units != null && context?.limit_units != null ? `${Number(context.used_units).toLocaleString()} / ${Number(context.limit_units).toLocaleString()} tokens` : 'Not reported'}</small></div>
       </div>
-      <div class="account-foot"><span>Last sync: ${esc(lastSeen)}</span><button class="button${actionClass} connect" data-id="${account.id}" data-kind="${kind}">${actionLabel}</button></div>
+      <div class="account-foot">
+        <span>Last sync: ${esc(lastSeen)}</span>
+        <div class="account-foot-actions">
+          <button class="button danger-outline delete-account" data-id="${account.id}">Delete</button>
+          <button class="button${actionClass} connect" data-id="${account.id}" data-kind="${kind}">${actionLabel}</button>
+        </div>
+      </div>
     </article>`;
   }).join('');
   container.querySelectorAll('.details').forEach(btn => btn.addEventListener('click', () => openDetails(Number(btn.dataset.id))));
   container.querySelectorAll('.connect').forEach(btn => btn.addEventListener('click', () => connect(Number(btn.dataset.id), btn, btn.dataset.kind)));
+  container.querySelectorAll('.delete-account').forEach(btn => btn.addEventListener('click', () => openDelete(Number(btn.dataset.id))));
 }
 
 function updateCountdowns() {
@@ -240,10 +274,41 @@ function openDetails(id) {
   $('#detailDialog').showModal();
 }
 
+function openDelete(id) {
+  const account = findAccount(id);
+  if (!account) return;
+  pendingDeleteId = id;
+  $('#deleteMessage').textContent = `This will permanently remove “${account.display_name || account.email}” (${account.email} · ${account.client || account.provider}) and its stored quota history from this local AI Quota instance.`;
+  $('#deleteDialog').showModal();
+}
+
+async function confirmDeleteAccount() {
+  if (!pendingDeleteId) return;
+  const button = $('#confirmDelete');
+  button.disabled = true;
+  const id = pendingDeleteId;
+  try {
+    await api(`/api/accounts/${id}`, {method:'DELETE'});
+    pendingDeleteId = null;
+    $('#deleteDialog').close();
+    $('#detailDialog')?.close();
+    await load(false);
+  } catch (error) {
+    alert(`Could not delete the account: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 $('#addAccount').onclick = () => $('#accountDialog').showModal();
 $('#closeDetail').onclick = () => $('#detailDialog').close();
 $('#sync').onclick = syncNow;
 $('#enableAntigravity').onclick = enableGlobalCollector;
+$('#confirmDelete').onclick = (event) => { event.preventDefault(); confirmDeleteAccount(); };
+$('#deleteForm').addEventListener('submit', (event) => event.preventDefault());
+$('#accountSearch').addEventListener('input', renderAccounts);
+$('#statusFilter').addEventListener('change', renderAccounts);
+$('#sortAccounts').addEventListener('change', renderAccounts);
 
 $('#accountForm').onsubmit = async (event) => {
   event.preventDefault();
