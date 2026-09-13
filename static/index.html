@@ -13,39 +13,43 @@
       <div>
         <div class="eyebrow">LOCAL AI CONTROL CENTER</div>
         <h1>AI Quota</h1>
-        <p>One place for accounts, limits, reset windows, credits and usage history.</p>
+        <p>Live quota, reset timers, token usage and account health in one place.</p>
       </div>
       <div class="top-actions">
-        <div class="live-clock" title="Your computer's current local time">
-          <span class="live-dot"></span>
-          <span id="localClock">—</span>
-        </div>
-        <button id="refresh" class="button">Refresh</button>
+        <div class="live-clock"><span class="live-dot"></span><span id="localClock">—</span></div>
+        <button id="refresh" class="button">Refresh now</button>
       </div>
     </header>
 
     <section class="stats">
       <article><span>Accounts</span><strong id="accountCount">0</strong></article>
-      <article><span>Tracked windows</span><strong id="windowCount">0</strong></article>
+      <article><span>Live quota windows</span><strong id="windowCount">0</strong></article>
       <article><span>Last data sync</span><strong id="lastSync">—</strong></article>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <div><h2>Accounts</h2><p>Only metadata is stored here. Credentials belong in an OS credential store.</p></div>
+        <div><h2>Accounts</h2><p>Only metadata is stored here. Live provider data arrives through local integrations.</p></div>
         <button id="addAccount" class="button primary">+ Add account</button>
       </div>
       <div id="accounts" class="accounts"></div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>Quota windows</h2><p>Provider-reported values are shown with their source and capture time. Reset countdowns update every second.</p></div></div>
+      <div class="panel-head">
+        <div><h2>Live quotas</h2><p>Countdowns update every second. Values come from connected provider telemetry.</p></div>
+      </div>
+      <div id="quotaCards" class="quota-cards"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><h2>Detailed history</h2><p>Captured quota windows are kept locally for history and trend views.</p></div></div>
       <div id="snapshots" class="table-wrap"></div>
     </section>
 
     <section class="security">
       <strong>Security boundary</strong>
-      <span>AI Quota binds to localhost. Never enter passwords, session cookies, OAuth refresh tokens, or API keys into this dashboard.</span>
+      <span>AI Quota is localhost-only. It never asks for passwords, session cookies, OAuth refresh tokens or API keys.</span>
     </section>
   </main>
 
@@ -53,11 +57,12 @@
     <form method="dialog" id="accountForm">
       <h2>Add account</h2>
       <label>Email<input name="email" type="email" required maxlength="320" placeholder="you@example.com"></label>
-      <label>Provider<input name="provider" required maxlength="80" placeholder="Antigravity / Gemini / Copilot / Codex"></label>
-      <label>Display name<input name="display_name" maxlength="120" placeholder="Work account"></label>
+      <label>Provider<input name="provider" required maxlength="80" value="Antigravity"></label>
+      <label>Display name<input name="display_name" maxlength="120" placeholder="Working account"></label>
       <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save</button></div>
     </form>
   </dialog>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
