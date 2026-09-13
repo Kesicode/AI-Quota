@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AI Quota</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">LOCAL AI CONTROL CENTER</div>
+        <h1>AI Quota</h1>
+        <p>One place for accounts, limits, reset windows, credits and usage history.</p>
+      </div>
+      <button id="refresh" class="button">Refresh</button>
+    </header>
+
+    <section class="stats">
+      <article><span>Accounts</span><strong id="accountCount">0</strong></article>
+      <article><span>Tracked windows</span><strong id="windowCount">0</strong></article>
+      <article><span>Last sync</span><strong id="lastSync">—</strong></article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div><h2>Accounts</h2><p>Only metadata is stored here. Credentials belong in an OS credential store.</p></div>
+        <button id="addAccount" class="button primary">+ Add account</button>
+      </div>
+      <div id="accounts" class="accounts"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><h2>Quota windows</h2><p>Provider-reported values are shown with their source and capture time.</p></div></div>
+      <div id="snapshots" class="table-wrap"></div>
+    </section>
+
+    <section class="security">
+      <strong>Security boundary</strong>
+      <span>AI Quota binds to localhost. Never enter passwords, session cookies, OAuth refresh tokens, or API keys into this dashboard.</span>
+    </section>
+  </main>
+
+  <dialog id="accountDialog">
+    <form method="dialog" id="accountForm">
+      <h2>Add account</h2>
+      <label>Email<input name="email" type="email" required maxlength="320" placeholder="you@example.com"></label>
+      <label>Provider<input name="provider" required maxlength="80" placeholder="Antigravity / Gemini / Copilot / Codex"></label>
+      <label>Display name<input name="display_name" maxlength="120" placeholder="Work account"></label>
+      <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save</button></div>
+    </form>
+  </dialog>
+  <script src="/static/app.js"></script>
+</body>
+</html>
