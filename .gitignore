@@ -7,6 +7,9 @@ venv/
 !.env.example
 data/*.db
 data/*.sqlite*
+data/antigravity-status/
+data/antigravity_statusline_bridge.py
+data/antigravity-previous-statusline.json
 *.log
 .DS_Store
 .vscode/
