@@ -14,7 +14,7 @@
       <div>
         <div class="eyebrow">LOCAL AI CONTROL CENTER</div>
         <h1>AI Quota</h1>
-        <p>All accounts. Live quota when available. Last-known snapshots when not. No random account testing.</p>
+        <p>One registry for Cloud Code, Codex, Antigravity, Gemini, Copilot and Google Cloud — with each source kept separate and labelled by authority.</p>
       </div>
       <div class="top-actions">
         <div class="live-clock"><span class="live-dot"></span><span id="localClock">—</span></div>
@@ -24,24 +24,68 @@
       </div>
     </header>
 
-    <section class="hero-grid">
-      <article class="hero-card best-card">
-        <div class="label">BEST AVAILABLE</div>
-        <div id="bestAccount">No live quota yet</div>
-        <small id="bestDetails">Open Antigravity 2.0 or Antigravity CLI and press Sync now.</small>
+    <section class="hero-grid priority-grid">
+      <article class="hero-card best-card priority-card cloud-code-priority">
+        <div class="label">PRIMARY · CLOUD CODE</div>
+        <div id="cloudCodeHero">Not connected</div>
+        <small id="cloudCodeHeroDetails">Cloud Code / Cloud Shell usage is tracked separately from Gemini API limits. The official Cloud Code weekly quota is a UI-visible 50-hour allowance; this dashboard will never substitute Gemini numbers for it.</small>
       </article>
-      <article class="hero-card"><span class="label">ACCOUNTS</span><strong id="accountCount">0</strong><small id="accountStates">0 live · 0 stale · 0 not connected</small></article>
-      <article class="hero-card"><span class="label">LIVE SOURCES</span><strong id="liveCount">0</strong><small>Provider telemetry seen in the last 60 seconds.</small></article>
+      <article class="hero-card priority-card">
+        <div class="label">CODEX</div>
+        <div id="codexHero">Not connected</div>
+        <small id="codexHeroDetails">Codex usage is plan-dependent and can expose 5-hour/weekly allowances and credits through supported OpenAI surfaces.</small>
+      </article>
+      <article class="hero-card">
+        <span class="label">ACCOUNTS</span>
+        <strong id="accountCount">0</strong>
+        <small id="accountStates">0 live · 0 stale · 0 not connected</small>
+      </article>
+      <article class="hero-card">
+        <span class="label">LIVE SOURCES</span>
+        <strong id="liveCount">0</strong>
+        <small>Only authoritative provider telemetry counts as live.</small>
+      </article>
+    </section>
+
+    <section class="panel provider-priority-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Provider priority</h2>
+          <p>The dashboard intentionally separates products that are often confused with one another.</p>
+        </div>
+      </div>
+      <div class="provider-grid">
+        <article class="provider-card provider-card-primary">
+          <div class="provider-head"><span class="provider-mark">CC</span><div><strong>Cloud Code / Cloud Shell</strong><small>Primary priority</small></div></div>
+          <p>Cloud Code is not Gemini API quota. The official Cloud Code / Cloud Shell weekly allowance is 50 hours and its current usage/reset are shown in the Cloud Shell session information UI.</p>
+          <div class="provider-truth"><span class="truth-dot truth-ui"></span><strong>Official UI-derived</strong><small>Do not replace this with Gemini API or project quota values.</small></div>
+        </article>
+        <article class="provider-card">
+          <div class="provider-head"><span class="provider-mark">CX</span><div><strong>Google Cloud project quotas</strong><small>Separate data class</small></div></div>
+          <p>Service/project quotas are a different authority. They can be collected from Google Cloud Quotas / gcloud when credentials and project access are available.</p>
+          <div class="provider-truth"><span class="truth-dot truth-api"></span><strong>API / CLI-derived</strong><small>Never display this as Cloud Code weekly hours.</small></div>
+        </article>
+        <article class="provider-card">
+          <div class="provider-head"><span class="provider-mark">CD</span><div><strong>OpenAI / Codex</strong><small>Separate from ChatGPT API</small></div></div>
+          <p>Codex with a ChatGPT plan has plan-dependent usage allowances and credits. API usage/rate limits are a separate OpenAI data source.</p>
+          <div class="provider-truth"><span class="truth-dot truth-provider"></span><strong>Provider surface</strong><small>Use supported OpenAI/Codex usage surfaces only.</small></div>
+        </article>
+        <article class="provider-card">
+          <div class="provider-head"><span class="provider-mark">GM</span><div><strong>Gemini / Gemini API</strong><small>Not Cloud Code</small></div></div>
+          <p>Gemini API limits are generally project-scoped and model-dependent. They must never be used as a proxy for Cloud Code or Codex.</p>
+          <div class="provider-truth"><span class="truth-dot truth-api"></span><strong>Project/API-derived</strong><small>RPM, TPM, RPD and model-specific limits where exposed.</small></div>
+        </article>
+      </div>
     </section>
 
     <section class="panel account-panel">
       <div class="panel-head account-toolbar">
         <div>
           <h2>Accounts</h2>
-          <p>Manage your account registry without storing passwords or browser sessions.</p>
+          <p>Register the email/project identity you want to track. Passwords, cookies and API keys are never stored here.</p>
         </div>
         <div class="toolbar-controls">
-          <input id="accountSearch" class="toolbar-input" type="search" placeholder="Search email, name, client…" aria-label="Search accounts">
+          <input id="accountSearch" class="toolbar-input" type="search" placeholder="Search email, project, name, client…" aria-label="Search accounts">
           <select id="statusFilter" class="toolbar-select" aria-label="Filter account status">
             <option value="all">All statuses</option>
             <option value="live">Live</option>
@@ -51,6 +95,7 @@
           </select>
           <select id="sortAccounts" class="toolbar-select" aria-label="Sort accounts">
             <option value="best">Best available</option>
+            <option value="priority">Priority</option>
             <option value="name">Name</option>
             <option value="status">Status</option>
             <option value="client">Client</option>
@@ -65,29 +110,34 @@
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>Provider / client coverage</h2><p>Clients are tracked separately. A client is never marked live unless AI Quota has an authoritative data source for it.</p></div></div>
-      <div class="info-grid">
-        <div><strong>Antigravity CLI</strong><span>Live collector through the documented status-line JSON payload, including model quota, reset times, plan, account email and context token usage.</span></div>
-        <div><strong>Antigravity 2.0</strong><span>Live local collector probes the running desktop app's loopback language-server quota service and reads the quota summary used by Models &amp; Usage.</span></div>
-        <div><strong>Antigravity IDE</strong><span>Tracked separately. Live collection is only enabled when a supported authoritative local/provider surface exists.</span></div>
-        <div><strong>VS Code / Copilot / Gemini / Cloud / Codex</strong><span>Separate provider adapters. Unknown values remain unknown instead of being guessed.</span></div>
+      <div class="panel-head">
+        <div>
+          <h2>Provider / client coverage</h2>
+          <p>A provider is only marked live when AI Quota has a real source for the exact product being displayed.</p>
+        </div>
+      </div>
+      <div class="info-grid provider-info-grid">
+        <div><strong>Cloud Code / Cloud Shell</strong><span>Priority source. Official weekly usage is separate from Gemini API and Google Cloud project quotas. Current Cloud Code weekly allowance is 50 hours.</span></div>
+        <div><strong>Antigravity CLI + 2.0</strong><span>Live collectors exist for the supported Antigravity local surfaces. Account matching is based on provider-reported identity.</span></div>
+        <div><strong>Google Cloud quotas</strong><span>Project/service quotas are separate from Cloud Code and Gemini subscription quotas. Values must retain their project and service identity.</span></div>
+        <div><strong>Codex / Gemini / Copilot / VS Code</strong><span>Tracked as separate products. Unsupported live collection remains clearly unavailable instead of being guessed.</span></div>
       </div>
     </section>
 
     <section class="security">
       <strong>Local-only security boundary</strong>
-      <span>AI Quota binds to 127.0.0.1. It stores quota metadata locally. Never enter passwords, browser cookies, session tokens, or API keys into this dashboard.</span>
+      <span>AI Quota binds to 127.0.0.1. Never enter passwords, browser cookies, session tokens or API keys into this dashboard.</span>
     </section>
   </main>
 
   <dialog id="accountDialog">
     <form method="dialog" id="accountForm">
-      <h2>Add account</h2>
-      <label>Email<input name="email" type="email" required maxlength="320" placeholder="you@example.com"></label>
-      <label>Provider<select name="provider"><option>Antigravity</option><option>Gemini API</option><option>Google Cloud</option><option>GitHub Copilot</option><option>OpenAI / Codex</option><option>Other</option></select></label>
-      <label>Client<select name="client"><option>Antigravity CLI</option><option>Antigravity 2.0</option><option>Antigravity IDE</option><option>VS Code</option><option>GitHub Copilot</option><option>Gemini API</option><option>Google Cloud</option><option>Codex</option><option>Other</option></select></label>
-      <label>Display name<input name="display_name" maxlength="120" placeholder="Personal / Work / Account 01"></label>
-      <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save account</button></div>
+      <h2>Add account / project</h2>
+      <label>Email / identity<input name="email" type="text" required maxlength="320" placeholder="you@example.com or project-id"></label>
+      <label>Provider<select name="provider"><option>Google Cloud</option><option>Cloud Code</option><option>OpenAI / Codex</option><option>Antigravity</option><option>Gemini API</option><option>GitHub Copilot</option><option>Other</option></select></label>
+      <label>Client<select name="client"><option>Cloud Code / Cloud Shell</option><option>Google Cloud quotas</option><option>Codex</option><option>Antigravity CLI</option><option>Antigravity 2.0</option><option>Gemini API</option><option>GitHub Copilot</option><option>VS Code</option><option>Other</option></select></label>
+      <label>Display name / project<input name="display_name" maxlength="120" placeholder="Primary Cloud project / Personal Codex / Work"></label>
+      <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save</button></div>
     </form>
   </dialog>
 
@@ -102,7 +152,7 @@
     <form method="dialog" id="deleteForm">
       <div class="danger-icon">!</div>
       <h2>Delete registered account?</h2>
-      <p id="deleteMessage">This removes the account and its stored quota history from this local AI Quota instance.</p>
+      <p id="deleteMessage">This removes the account/project and its stored quota history from this local AI Quota instance.</p>
       <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button id="confirmDelete" value="default" class="button danger-button">Delete account</button></div>
     </form>
   </dialog>
