@@ -4,7 +4,6 @@ const esc = (v) => String(v ?? '').replace(/[&<>\"']/g, (c) => ({'&':'&amp;','<'
 let dashboard = {summary:{}, accounts:[], ranking:[]};
 let liveTimer = null;
 let refreshTimer = null;
-let lastDataAt = null;
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -43,10 +42,7 @@ function formatDuration(seconds) {
 function formatReset(resetAt) {
   if (!resetAt) return { countdown: '—', timestamp: '—' };
   const ms = new Date(resetAt).getTime() - Date.now();
-  return {
-    countdown: formatDuration(ms / 1000),
-    timestamp: new Date(resetAt).toLocaleString(),
-  };
+  return { countdown: formatDuration(ms / 1000), timestamp: new Date(resetAt).toLocaleString() };
 }
 
 function statusLabel(status) {
@@ -68,12 +64,11 @@ function renderSummary() {
   $('#accountCount').textContent = summary.accounts ?? 0;
   $('#liveCount').textContent = summary.live ?? 0;
   $('#accountStates').textContent = `${summary.live ?? 0} live · ${summary.stale ?? 0} stale · ${summary.not_connected ?? 0} not connected · ${summary.exhausted ?? 0} exhausted`;
-
   const bestId = summary.best_account_id;
   const best = dashboard.ranking?.find(a => a.id === bestId) || null;
   if (!best) {
     $('#bestAccount').textContent = 'No live quota yet';
-    $('#bestDetails').textContent = 'Connect at least one Antigravity CLI account to get a real provider reading.';
+    $('#bestDetails').textContent = 'Enable the collector and run/restart Antigravity CLI to receive real provider telemetry.';
     return;
   }
   const quota = bestQuota(best);
@@ -108,17 +103,15 @@ function renderAccounts() {
     container.innerHTML = `<div class="empty">No accounts yet. Add your 10–15 accounts here.</div>`;
     return;
   }
-
   container.innerHTML = accounts.map(account => {
     const quota = bestQuota(account);
     const status = account.status || 'not_connected';
     const snapshots = account.snapshots || [];
     const context = snapshots.find(s => s.window_name === 'Context Window');
     const credits = account.credits_remaining == null ? '—' : Number(account.credits_remaining).toLocaleString();
-    const liveAge = account.telemetry_age_seconds == null ? null : Number(account.telemetry_age_seconds);
     const lastSeen = account.last_seen_at ? new Date(account.last_seen_at).toLocaleString() : 'Never';
-    const staleNote = liveAge == null ? 'No telemetry received' : `Last payload ${formatDuration(liveAge)} ago`;
-    const connectText = status === 'live' ? 'Connected' : 'Connect source';
+    const staleNote = account.telemetry_age_seconds == null ? 'No telemetry received' : `Last payload ${formatDuration(account.telemetry_age_seconds)} ago`;
+    const isCli = account.provider.toLowerCase() === 'antigravity' && (account.client || '').toLowerCase().includes('cli');
     return `<article class="account-card ${statusClass(status)}">
       <div class="account-card-head">
         <div class="account-title-wrap">
@@ -133,26 +126,23 @@ function renderAccounts() {
         <div class="summary-box"><span>Credits</span><strong>${credits}</strong><small>Only shown when a real balance is collected</small></div>
         <div class="summary-box"><span>Context</span><strong>${context?.remaining_percent != null ? `${Number(context.remaining_percent).toFixed(1)}%` : '—'}</strong><small>${context?.used_units != null && context?.limit_units != null ? `${Number(context.used_units).toLocaleString()} / ${Number(context.limit_units).toLocaleString()} tokens` : 'Not reported'}</small></div>
       </div>
-      <div class="account-foot"><span>Last sync: ${esc(lastSeen)}</span>${account.provider.toLowerCase() === 'antigravity' && (account.client || '').toLowerCase().includes('cli') ? `<button class="button ${status === 'live' ? '' : 'primary'} connect" data-id="${account.id}">${connectText}</button>` : `<button class="button connect unsupported" data-id="${account.id}">Source setup</button>`}</div>
+      <div class="account-foot"><span>Last sync: ${esc(lastSeen)}</span>${isCli ? `<button class="button ${status === 'live' ? '' : 'primary'} connect" data-id="${account.id}">${status === 'live' ? 'CLI collector on' : 'Enable collector'}</button>` : `<button class="button connect unsupported" data-id="${account.id}">Source setup</button>`}</div>
     </article>`;
   }).join('');
-
   container.querySelectorAll('.details').forEach(btn => btn.addEventListener('click', () => openDetails(Number(btn.dataset.id))));
   container.querySelectorAll('.connect').forEach(btn => btn.addEventListener('click', () => connect(Number(btn.dataset.id), btn)));
 }
 
 function updateCountdowns() {
+  $('#localClock').textContent = new Date().toLocaleTimeString();
   document.querySelectorAll('[data-reset]').forEach(el => {
     el.textContent = formatReset(el.dataset.reset).countdown;
   });
-  const now = new Date();
-  $('#localClock').textContent = now.toLocaleTimeString();
 }
 
 async function load(silent = false) {
   try {
     dashboard = await api('/api/dashboard');
-    lastDataAt = new Date();
     renderSummary();
     renderAccounts();
     updateCountdowns();
@@ -167,38 +157,37 @@ async function syncNow() {
   button.disabled = true;
   const old = button.textContent;
   button.textContent = 'Syncing…';
-  try {
-    await api('/api/sync', {method:'POST'});
-    await load(false);
-  } finally {
-    button.disabled = false;
-    button.textContent = old;
-  }
+  try { await api('/api/sync', {method:'POST'}); await load(false); }
+  finally { button.disabled = false; button.textContent = old; }
 }
 
-async function connect(id, button) {
+async function installGlobalCollector(accountId, button) {
   button.disabled = true;
   const old = button.textContent;
   button.textContent = 'Installing…';
   try {
-    const result = await api(`/api/accounts/${id}/connect`, {method:'POST'});
-    if (!result.ok) {
-      alert(result.message);
-      return;
-    }
-    alert(`${result.message}\n\nSettings: ${result.settings_path}`);
+    const result = await api(`/api/accounts/${accountId}/connect`, {method:'POST'});
+    if (!result.ok) { alert(result.message); return; }
+    alert(`${result.message}\n\nRestart Antigravity CLI after this step.`);
     await load(false);
   } catch (error) {
-    alert(`Could not connect source: ${error.message}`);
-  } finally {
-    button.disabled = false;
-    button.textContent = old;
-  }
+    alert(`Could not enable the collector: ${error.message}`);
+  } finally { button.disabled = false; button.textContent = old; }
 }
 
-function findAccount(id) {
-  return dashboard.accounts.find(account => Number(account.id) === Number(id));
+async function connect(id, button) { await installGlobalCollector(id, button); }
+
+async function enableGlobalCollector() {
+  const account = dashboard.accounts.find(a => a.provider?.toLowerCase() === 'antigravity' && a.client?.toLowerCase().includes('cli'));
+  if (!account) {
+    alert('Add at least one Antigravity CLI account first. The collector itself is global and will then follow whichever Antigravity account is currently active.');
+    $('#accountDialog').showModal();
+    return;
+  }
+  await installGlobalCollector(account.id, $('#enableAntigravity'));
 }
+
+function findAccount(id) { return dashboard.accounts.find(account => Number(account.id) === Number(id)); }
 
 function openDetails(id) {
   const account = findAccount(id);
@@ -223,6 +212,7 @@ function openDetails(id) {
 $('#addAccount').onclick = () => $('#accountDialog').showModal();
 $('#closeDetail').onclick = () => $('#detailDialog').close();
 $('#sync').onclick = syncNow;
+$('#enableAntigravity').onclick = enableGlobalCollector;
 
 $('#accountForm').onsubmit = async (event) => {
   event.preventDefault();
@@ -237,9 +227,7 @@ $('#accountForm').onsubmit = async (event) => {
     await load(false);
   } catch (error) {
     alert(`Could not add account: ${error.message}`);
-  } finally {
-    button.disabled = false;
-  }
+  } finally { button.disabled = false; }
 };
 
 if (!liveTimer) liveTimer = setInterval(updateCountdowns, 1000);
