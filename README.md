@@ -1,40 +1,50 @@
 # AI Quota
 
-**AI Quota** is a local-first dashboard for monitoring multiple AI accounts, quota windows, reset timers, context-token usage, credits, and provider health without storing account passwords or browser cookies.
+**AI Quota** is a local-first dashboard for monitoring multiple AI and developer-tool accounts, quota windows, reset timers, context-token usage, credits, and provider health without storing account passwords or browser cookies.
+
+## Important provider separation
+
+The dashboard deliberately treats **Cloud Code / Cloud Shell, Google Cloud project quotas, Gemini API, OpenAI/Codex, Antigravity, and GitHub Copilot as different products and different quota authorities**.
+
+This matters because a Gemini number is not a Cloud Code number, a Google Cloud project quota is not a Cloud Code weekly allowance, and a Codex usage allowance is not the OpenAI API rate limit.
+
+### Cloud Code is the primary priority
+
+Cloud Code for Cloud Shell currently has a default **50-hour weekly usage quota**. Google documents the current remaining hours and reset timestamp through the Cloud Shell session information → Usage quota UI. AI Quota therefore labels Cloud Code as **official UI-derived** unless a supported machine-readable source becomes available. It must never substitute Gemini or Google Cloud project values for this allowance.
+
+### Google Cloud quotas are separate
+
+Google Cloud project/service quotas are managed through Cloud Quotas and supported APIs/`gcloud` surfaces. These quotas are project/service specific and are a different data class from Cloud Code's weekly hours.
+
+### Codex is separate from the OpenAI API
+
+Codex usage with a ChatGPT plan is plan-dependent and may expose 5-hour/weekly usage allowances, reset information, and credits through supported OpenAI surfaces. OpenAI API usage/rate limits are separate and must not be merged with Codex usage.
 
 ## Current architecture
 
 - FastAPI backend bound to `127.0.0.1`.
 - SQLite history for quota snapshots.
-- Account inventory designed for 10–15+ emails.
+- Account inventory designed for 10–15+ identities.
 - Per-account status: live, stale, exhausted, or not connected.
 - Live countdowns update every second in the browser.
 - Automatic dashboard refresh every 5 seconds.
 - Antigravity CLI collector through the provider's supported status-line JSON interface.
-- Automatic matching by the email reported by Antigravity.
-- Automatic discovery of new Antigravity CLI accounts when their telemetry first appears.
+- Antigravity 2.0 local collector through its supported local quota surface.
+- Automatic matching by provider-reported account identity where supported.
 - Last-known quota snapshots are preserved after an account is switched away.
-- Separate client fields for Antigravity CLI, Antigravity IDE, VS Code, Copilot, Gemini API, Google Cloud, Codex, and other providers.
-
-## Antigravity workflow
-
-1. Add the emails you use, or add at least one Antigravity CLI account.
-2. Click **Enable Antigravity CLI collector** once.
-3. Restart Antigravity CLI.
-4. Use/switch accounts normally in Antigravity.
-5. AI Quota matches the provider-reported email and keeps each account's latest quota/reset data.
-
-The collector is global to the local Antigravity CLI installation; it is not one separate statusline per email. This is intentional: the provider's status-line payload represents the currently authenticated session, while AI Quota stores the historical snapshots for every account it sees.
+- Provider/client records remain separate so unsupported products are not falsely shown as live.
 
 ## Provider truth model
 
 AI Quota does not fabricate quota values. A field is shown only when a provider source supplied it. Otherwise the dashboard shows **Unknown**, **Not connected**, **Stale**, or **Unavailable**.
 
-Antigravity documents `/usage` (alias `/quota`) for model quota information and its status-line payload for fields such as `email`, `plan_tier`, `context_window`, and `quota` entries with `remaining_fraction` and reset information. AI Credits are exposed separately through `/credits`, so credit balance is treated as a distinct data source. See the official Antigravity documentation before extending collectors.
+Every number should retain:
 
-Antigravity CLI and the visual Antigravity IDE are separate product surfaces. The current live collector is specifically for the CLI status-line interface; the IDE is represented in the account model but is not falsely reported as live until a supported telemetry source is implemented.
-
-GitHub Copilot changed to usage-based billing with AI Credits for current plans in 2026, while legacy premium-request documentation applies to certain annual subscribers. Provider adapters therefore remain separate rather than assuming one universal quota model.
+- product/client identity
+- account or project identity
+- source
+- capture timestamp
+- confidence/authority type
 
 ## Security
 
@@ -42,7 +52,7 @@ GitHub Copilot changed to usage-based billing with AI Credits for current plans 
 - Never store browser session cookies.
 - Never put API keys or refresh tokens in frontend JavaScript or the SQLite database.
 - Keep the server local by default.
-- Store only the provider telemetry fields required for quota monitoring.
+- Store only provider telemetry required for monitoring.
 - Keep local databases, telemetry, logs, and environment files out of Git.
 - Never automate account rotation to bypass provider limits.
 
@@ -63,12 +73,17 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
-## Next integration order
+## Collector status
 
-1. Antigravity CLI quota + context + credits collection.
-2. Gemini API project limits and usage.
-3. Google Cloud quotas/billing signals.
-4. GitHub Copilot usage and AI-credit information where officially exposed.
-5. VS Code provider-specific adapters.
-6. OpenAI/Codex usage and limits from supported OpenAI surfaces.
-7. Alerts, history graphs, export, encrypted local backups, and provider health diagnostics.
+| Product | Current live collector | Important limitation |
+|---|---|---|
+| Cloud Code / Cloud Shell | Not yet machine-readable in this app | Official weekly quota is currently UI-visible; do not substitute Gemini/Cloud project data |
+| Google Cloud project quotas | Planned | Project/service quotas are separate from Cloud Code |
+| Codex | Planned | Use supported OpenAI/Codex usage surfaces; do not scrape private sessions |
+| Gemini API | Planned | Limits are project/model dependent |
+| GitHub Copilot | Planned | Current plans use usage/AI-credit concepts that vary by plan |
+| VS Code | Host only | Actual quota authority comes from the installed provider extension |
+| Antigravity CLI | Live | Uses supported status-line telemetry |
+| Antigravity 2.0 | Live | Uses local quota service when available |
+
+The UI intentionally reflects this table instead of pretending all providers are live.
