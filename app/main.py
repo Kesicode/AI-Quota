@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -99,10 +97,12 @@ def _bridge_path() -> Path:
 
 def _write_bridge() -> Path:
     path = _bridge_path()
-    script = '''import json, os, sys, tempfile
+    status_dir = str(STATUS_DIR.resolve()).replace("\\", "\\\\")
+    script = f'''import hashlib, json, os, sys, tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
-status_dir = Path(os.environ.get("AI_QUOTA_STATUS_DIR", "data/antigravity-status"))
+status_dir = Path(r"{status_dir}")
 status_dir.mkdir(parents=True, exist_ok=True)
 try:
     payload = json.load(sys.stdin)
@@ -113,18 +113,18 @@ email = str(payload.get("email") or "").strip().lower()
 if not email:
     print("AI Quota: account unavailable")
     raise SystemExit(0)
-keep = {
-    "captured_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+keep = {{
+    "captured_at": datetime.now(timezone.utc).isoformat(),
     "email": email,
     "product": payload.get("product"),
     "version": payload.get("version"),
     "plan_tier": payload.get("plan_tier"),
     "model": payload.get("model"),
     "context_window": payload.get("context_window"),
-    "quota": payload.get("quota", {}),
-}
-key = __import__("hashlib").sha256(email.encode()).hexdigest()[:24]
-out = status_dir / f"{key}.json"
+    "quota": payload.get("quota", {{}}),
+}}
+key = hashlib.sha256(email.encode()).hexdigest()[:24]
+out = status_dir / f"{{key}}.json"
 fd, tmp = tempfile.mkstemp(dir=status_dir, prefix=".aiquota-", suffix=".tmp")
 os.close(fd)
 Path(tmp).write_text(json.dumps(keep, separators=(",", ":")), encoding="utf-8")
@@ -177,7 +177,7 @@ def _load_status_files() -> list[dict[str, Any]]:
     items = []
     for path in STATUS_DIR.glob("*.json"):
         try:
-            items.append(json.loads(path.read_text(encoding="utf-8")))
+            items.append(json.loads(path.read_text(encoding="utf-8")) )
         except Exception:
             continue
     return items
@@ -212,14 +212,12 @@ def _sync_antigravity() -> int:
                          limit_units, unit, reset_at, source, captured_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (account["id"], "Antigravity", bucket_id, _bucket_name(bucket_id),
-                         remaining_pct, None, None, "requests/tokens", reset_at, "antigravity-statusline", captured_at),
+                         remaining_pct, None, None, "provider bucket", reset_at, "antigravity-statusline", captured_at),
                     )
                     changed += 1
             ctx = item.get("context_window") or {}
             total = ctx.get("context_window_size")
             used_pct = ctx.get("used_percentage")
-            total_input = ctx.get("total_input_tokens")
-            total_output = ctx.get("total_output_tokens")
             if total is not None and used_pct is not None:
                 exists = conn.execute(
                     "SELECT id FROM quota_snapshots WHERE account_id=? AND service=? AND model=? AND window_name=? AND captured_at=?",
