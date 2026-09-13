@@ -106,22 +106,31 @@ function providerAccounts(key) {
 }
 
 function renderPriorityHeroes() {
+  // Older hero cards were replaced by the smart summary. Keep this helper
+  // harmless so old UI builds do not crash when those nodes are absent.
+  const cloudHero = $('#cloudCodeHero');
+  const cloudDetails = $('#cloudCodeHeroDetails');
+  const codexHero = $('#codexHero');
+  const codexDetails = $('#codexHeroDetails');
   const cloud = providerAccounts('cloud_code');
   const codex = providerAccounts('codex');
   const cloudLive = cloud.find(a => effectiveStatus(a) === 'live');
   const codexLive = codex.find(a => effectiveStatus(a) === 'live');
-  $('#cloudCodeHero').textContent = cloudLive ? (cloudLive.display_name || cloudLive.email) : (cloud.length ? 'Registered · not connected' : 'Not connected');
-  $('#cloudCodeHeroDetails').textContent = cloudLive ? `${cloudLive.email} · authoritative telemetry` : 'Cloud Code is intentionally separated from Gemini API and Google Cloud project quotas.';
-  $('#codexHero').textContent = codexLive ? (codexLive.display_name || codexLive.email) : (codex.length ? 'Registered · not connected' : 'Not connected');
-  $('#codexHeroDetails').textContent = codexLive ? `${codexLive.email} · provider telemetry` : 'Codex usage is tracked separately from OpenAI API limits.';
+  if (cloudHero) cloudHero.textContent = cloudLive ? (cloudLive.display_name || cloudLive.email) : (cloud.length ? 'Registered · not connected' : 'Not connected');
+  if (cloudDetails) cloudDetails.textContent = cloudLive ? `${cloudLive.email} · authoritative telemetry` : 'Cloud Code is intentionally separated from Gemini API and Google Cloud project quotas.';
+  if (codexHero) codexHero.textContent = codexLive ? (codexLive.display_name || codexLive.email) : (codex.length ? 'Registered · not connected' : 'Not connected');
+  if (codexDetails) codexDetails.textContent = codexLive ? `${codexLive.email} · provider telemetry` : 'Codex usage is tracked separately from OpenAI API limits.';
 }
 
 function renderSummary() {
   const accounts = dashboard.accounts || [];
   const states = accounts.reduce((m,a) => { const s=effectiveStatus(a); m[s]=(m[s]||0)+1; return m; }, {});
-  $('#accountCount').textContent = accounts.length;
-  $('#liveCount').textContent = states.live || 0;
-  $('#accountStates').textContent = `${states.live||0} live · ${states.stale||0} stale · ${states.not_connected||0} not connected · ${states.exhausted||0} exhausted`;
+  const accountCount = $('#accountCount');
+  const liveCount = $('#liveCount');
+  const accountStates = $('#accountStates');
+  if (accountCount) accountCount.textContent = accounts.length;
+  if (liveCount) liveCount.textContent = states.live || 0;
+  if (accountStates) accountStates.textContent = `${states.live||0} live · ${states.stale||0} stale · ${states.not_connected||0} not connected · ${states.exhausted||0} exhausted`;
   renderPriorityHeroes();
 }
 
@@ -170,9 +179,11 @@ function connectButton(account, status, kind) {
 
 function renderAccounts() {
   const container = $('#accounts');
+  if (!container) return;
   const all = dashboard.accounts || [];
   const list = filteredAccounts();
-  $('#visibleCount').textContent = `${list.length} shown`;
+  const visibleCount = $('#visibleCount');
+  if (visibleCount) visibleCount.textContent = `${list.length} shown`;
   setEmptyState(all.length === 0);
   if (!all.length) { container.innerHTML = '<div class="empty">No accounts yet.</div>'; return; }
   if (!list.length) { container.innerHTML = '<div class="empty">No accounts match your search/filter.</div>'; return; }
@@ -205,13 +216,15 @@ function renderAccounts() {
 }
 
 function updateCountdowns() {
-  $('#localClock').textContent = new Date().toLocaleTimeString();
+  const clock = $('#localClock');
+  if (clock) clock.textContent = new Date().toLocaleTimeString();
   document.querySelectorAll('[data-reset]').forEach(el => el.textContent = resetInfo(el.dataset.reset).countdown);
 }
 
 async function load(silent = false) {
   try {
     dashboard = await api('/api/dashboard');
+    window.__aiQuotaDashboard = dashboard;
     renderSummary();
     renderAccounts();
     updateCountdowns();
@@ -222,7 +235,8 @@ async function load(silent = false) {
 }
 
 async function syncNow() {
-  const b = $('#sync'); const old = b.textContent; b.disabled = true; b.textContent = 'Syncing…';
+  const b = $('#sync'); if (!b) return;
+  const old = b.textContent; b.disabled = true; b.textContent = 'Syncing…';
   try { await api('/api/sync',{method:'POST'}); await load(false); }
   catch(e) { alert(`Sync failed: ${e.message}`); }
   finally { b.disabled = false; b.textContent = old; }
@@ -264,13 +278,15 @@ function openDetails(id){
 function openDelete(id){
   const a=findAccount(id); if(!a) return;
   pendingDeleteId=id;
-  $('#deleteMessage').textContent=`This will permanently remove “${a.display_name||a.email}” (${a.email} · ${a.client||a.provider}) and its stored quota history from this local AI Quota instance.`;
+  const msg = $('#deleteMessage');
+  if (msg) msg.textContent=`This will permanently remove “${a.display_name||a.email}” (${a.email} · ${a.client||a.provider}) and its stored quota history from this local AI Quota instance.`;
   $('#deleteDialog')?.showModal();
 }
 
 async function confirmDeleteAccount(){
   if(!pendingDeleteId) return;
-  const b=$('#confirmDelete'); b.disabled=true;
+  const b=$('#confirmDelete'); if (!b) return;
+  b.disabled=true;
   try{await api(`/api/accounts/${pendingDeleteId}`,{method:'DELETE'}); pendingDeleteId=null; $('#deleteDialog')?.close(); await load(false);}
   catch(e){alert(`Could not delete the account: ${e.message}`);} finally{b.disabled=false;}
 }
@@ -281,16 +297,16 @@ $('#sync')?.addEventListener('click',syncNow);
 $('#enableAntigravity')?.addEventListener('click',enableGlobalCollector);
 $('#confirmDelete')?.addEventListener('click',(e)=>{e.preventDefault();confirmDeleteAccount();});
 $('#accountForm')?.addEventListener('submit',async e=>{
-  e.preventDefault(); const form=e.currentTarget; const button=form.querySelector('button[value="default"]'); const data=Object.fromEntries(new FormData(form)); button.disabled=true;
+  e.preventDefault(); const form=e.currentTarget; const button=form.querySelector('button[value="default"]'); const data=Object.fromEntries(new FormData(form));
+  if (button) button.disabled=true;
   try{await api('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); form.reset(); $('#accountDialog')?.close(); await load(false);}
-  catch(err){alert(`Could not add account: ${err.message}`);} finally{button.disabled=false;}
+  catch(err){alert(`Could not add account: ${err.message}`);} finally{if(button) button.disabled=false;}
 });
 $('#accountSearch')?.addEventListener('input',renderAccounts);
 $('#statusFilter')?.addEventListener('change',renderAccounts);
 $('#sortAccounts')?.addEventListener('change',renderAccounts);
 
 // Close native dialogs by clicking the backdrop (outside the dialog frame).
-// This applies to Add Account, Account Details and Delete dialogs.
 ['accountDialog', 'detailDialog', 'deleteDialog'].forEach((id) => {
   const dialog = document.getElementById(id);
   if (!dialog) return;
@@ -301,7 +317,6 @@ $('#sortAccounts')?.addEventListener('change',renderAccounts);
   });
 });
 
-// Escape closes dialogs naturally; keep the delete state in sync when it does.
 $('#deleteDialog')?.addEventListener('close', () => { pendingDeleteId = null; });
 
 liveTimer=setInterval(updateCountdowns,1000);
