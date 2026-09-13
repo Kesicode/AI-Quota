@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .antigravity_probe import probe_antigravity_2
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "ai_quota.db"
@@ -175,11 +177,7 @@ def install_antigravity_bridge() -> dict[str, Any]:
     if previous is not None and not backup.exists():
         backup.write_text(json.dumps(previous, indent=2), encoding="utf-8")
     command = f'"{sys.executable}" "{bridge}"'
-    data["statusLine"] = {
-        "type": "command",
-        "command": command,
-        "enabled": True,
-    }
+    data["statusLine"] = {"type": "command", "command": command, "enabled": True}
     settings.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return {"settings_path": str(settings), "bridge_path": str(bridge), "previous_saved": previous is not None}
 
@@ -217,51 +215,42 @@ def payload_age_seconds(payload: dict[str, Any]) -> float | None:
         return None
 
 
-def ensure_discovered_account(conn: sqlite3.Connection, email: str) -> sqlite3.Row:
+def ensure_discovered_account(conn: sqlite3.Connection, email: str, client: str, source_kind: str = "auto_discovered") -> sqlite3.Row:
     row = conn.execute(
-        "SELECT * FROM accounts WHERE lower(email)=? AND lower(provider)='antigravity' AND lower(client)='antigravity cli' ORDER BY id LIMIT 1",
-        (email,),
+        "SELECT * FROM accounts WHERE lower(email)=? AND lower(provider)='antigravity' AND lower(client)=? ORDER BY id LIMIT 1",
+        (email, client.lower()),
     ).fetchone()
     if row:
         return row
     now = now_iso()
     cur = conn.execute(
         """INSERT INTO accounts(email, provider, display_name, client, created_at, status, source_kind)
-           VALUES (?, 'Antigravity', ?, 'Antigravity CLI', ?, 'live', 'auto_discovered')""",
-        (email, email, now),
+           VALUES (?, 'Antigravity', ?, ?, ?, 'live', ?)""",
+        (email, email, client, now, source_kind),
     )
     return conn.execute("SELECT * FROM accounts WHERE id=?", (cur.lastrowid,)).fetchone()
 
 
-def sync_antigravity() -> dict[str, Any]:
-    changed = 0
-    matched = 0
-    discovered = 0
+def sync_antigravity_cli() -> dict[str, Any]:
+    changed = matched = discovered = 0
     with db() as conn:
         for item in load_status_files():
             email = str(item.get("email") or "").strip().lower()
             if not email:
                 continue
-            age = payload_age_seconds(item)
             before = conn.execute(
                 "SELECT id FROM accounts WHERE lower(email)=? AND lower(provider)='antigravity' AND lower(client)='antigravity cli' ORDER BY id LIMIT 1",
                 (email,),
             ).fetchone()
-            account = ensure_discovered_account(conn, email)
+            account = ensure_discovered_account(conn, email, "Antigravity CLI")
             discovered += 1 if before is None else 0
-            if age is None or age > 3600:
-                status = "stale"
-            else:
-                quota = item.get("quota") or {}
-                percentages = [float(bucket["remaining_fraction"]) * 100.0 for bucket in quota.values() if isinstance(bucket, dict) and bucket.get("remaining_fraction") is not None]
-                status = "exhausted" if percentages and max(percentages) <= 0 else ("live" if age <= 60 else "stale")
+            age = payload_age_seconds(item)
+            quota = item.get("quota") or {}
+            percentages = [float(bucket["remaining_fraction"]) * 100.0 for bucket in quota.values() if isinstance(bucket, dict) and bucket.get("remaining_fraction") is not None]
+            status = "stale" if age is None or age > 3600 else ("exhausted" if percentages and max(percentages) <= 0 else ("live" if age <= 60 else "stale"))
             matched += 1
             captured_at = str(item.get("captured_at") or now_iso())
-            conn.execute(
-                "UPDATE accounts SET status=?, plan_tier=?, last_seen_at=?, last_error=NULL WHERE id=?",
-                (status, item.get("plan_tier"), captured_at, account["id"]),
-            )
-            quota = item.get("quota") or {}
+            conn.execute("UPDATE accounts SET status=?, plan_tier=?, last_seen_at=?, last_error=NULL WHERE id=?", (status, item.get("plan_tier"), captured_at, account["id"]))
             for bucket_id, bucket in quota.items():
                 if not isinstance(bucket, dict):
                     continue
@@ -269,52 +258,85 @@ def sync_antigravity() -> dict[str, Any]:
                 reset_at = bucket.get("reset_time")
                 pct = None if remaining is None else max(0.0, min(100.0, float(remaining) * 100.0))
                 window = bucket_name(str(bucket_id))
-                exists = conn.execute(
-                    """SELECT 1 FROM quota_snapshots WHERE account_id=? AND service=? AND client=? AND model=? AND window_name=? AND captured_at=?""",
-                    (account["id"], "Antigravity", "Antigravity CLI", str(bucket_id), window, captured_at),
-                ).fetchone()
+                exists = conn.execute("SELECT 1 FROM quota_snapshots WHERE account_id=? AND service='Antigravity' AND client='Antigravity CLI' AND model=? AND window_name=? AND captured_at=?", (account["id"], str(bucket_id), window, captured_at)).fetchone()
                 if not exists:
                     conn.execute(
-                        """INSERT INTO quota_snapshots (account_id, service, client, model, window_name, remaining_percent, used_units, limit_units, unit, reset_at, source, captured_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (account["id"], "Antigravity", "Antigravity CLI", str(bucket_id), window, pct, None, None, "provider quota", reset_at, "antigravity-statusline", captured_at),
+                        """INSERT INTO quota_snapshots (account_id, service, client, model, window_name, remaining_percent, unit, reset_at, source, captured_at)
+                           VALUES (?, 'Antigravity', 'Antigravity CLI', ?, ?, ?, 'provider quota', ?, 'antigravity-statusline', ?)""",
+                        (account["id"], str(bucket_id), window, pct, reset_at, captured_at),
                     )
                     changed += 1
             ctx = item.get("context_window") or {}
             size = ctx.get("context_window_size")
             used_pct = ctx.get("used_percentage")
             if size is not None and used_pct is not None:
-                used_units = float(size) * float(used_pct) / 100.0
                 remaining_pct = max(0.0, min(100.0, 100.0 - float(used_pct)))
-                exists = conn.execute(
-                    """SELECT 1 FROM quota_snapshots WHERE account_id=? AND service=? AND client=? AND model=? AND window_name=? AND captured_at=?""",
-                    (account["id"], "Antigravity", "Antigravity CLI", "Context Window", "Context Window", captured_at),
-                ).fetchone()
+                exists = conn.execute("SELECT 1 FROM quota_snapshots WHERE account_id=? AND service='Antigravity' AND client='Antigravity CLI' AND model='Context Window' AND window_name='Context Window' AND captured_at=?", (account["id"], captured_at)).fetchone()
                 if not exists:
                     conn.execute(
-                        """INSERT INTO quota_snapshots (account_id, service, client, model, window_name, remaining_percent, used_units, limit_units, unit, reset_at, source, captured_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (account["id"], "Antigravity", "Antigravity CLI", "Context Window", "Context Window", remaining_pct, used_units, float(size), "tokens", None, "antigravity-statusline", captured_at),
+                        """INSERT INTO quota_snapshots (account_id, service, client, model, window_name, remaining_percent, used_units, limit_units, unit, source, captured_at)
+                           VALUES (?, 'Antigravity', 'Antigravity CLI', 'Context Window', 'Context Window', ?, ?, ?, 'tokens', 'antigravity-statusline', ?)""",
+                        (account["id"], remaining_pct, float(size) * float(used_pct) / 100.0, float(size), captured_at),
                     )
                     changed += 1
-        rows = conn.execute("SELECT * FROM accounts WHERE lower(provider)='antigravity' AND lower(client)='antigravity cli'").fetchall()
-        for row in rows:
-            path = status_path(row["email"])
-            if not path.exists():
-                if row["status"] == "live":
-                    conn.execute("UPDATE accounts SET status='stale' WHERE id=?", (row["id"],))
-                continue
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-                age = payload_age_seconds(payload) or 999999
-                if age > 3600:
-                    conn.execute("UPDATE accounts SET status='stale' WHERE id=?", (row["id"],))
-            except Exception:
-                conn.execute("UPDATE accounts SET status='stale' WHERE id=?", (row["id"],))
     return {"changed": changed, "matched": matched, "discovered": discovered}
 
 
-def current_status(email: str) -> dict[str, Any]:
+def _probe_2_to_account_db(result: dict[str, Any]) -> dict[str, Any]:
+    if not result.get("ok"):
+        return {"ok": False, "changed": 0, "matched": 0, "error": result.get("error")}
+    email = str(result.get("email") or "").strip().lower()
+    if not email:
+        return {"ok": False, "changed": 0, "matched": 0, "error": "Antigravity 2.0 local server did not report an account email"}
+    captured_at = datetime.fromtimestamp(float(result.get("captured_at") or datetime.now(timezone.utc).timestamp()), timezone.utc).isoformat()
+    plan_tier = result.get("plan_tier")
+    windows = result.get("windows") or []
+    with db() as conn:
+        before = conn.execute("SELECT id FROM accounts WHERE lower(email)=? AND lower(provider)='antigravity' AND lower(client)='antigravity 2.0' ORDER BY id LIMIT 1", (email,)).fetchone()
+        account = ensure_discovered_account(conn, email, "Antigravity 2.0")
+        discovered = 1 if before is None else 0
+        percentages = [float(item["remaining_fraction"]) * 100.0 for item in windows if item.get("remaining_fraction") is not None]
+        status = "exhausted" if percentages and max(percentages) <= 0 else "live"
+        conn.execute("UPDATE accounts SET status=?, plan_tier=?, last_seen_at=?, last_error=NULL WHERE id=?", (status, plan_tier, captured_at, account["id"]))
+        changed = 0
+        for item in windows:
+            frac = item.get("remaining_fraction")
+            pct = None if frac is None else max(0.0, min(100.0, float(frac) * 100.0))
+            model = str(item.get("model") or item.get("group") or "Antigravity")
+            window = str(item.get("window_name") or "Quota")
+            exists = conn.execute("SELECT 1 FROM quota_snapshots WHERE account_id=? AND service='Antigravity' AND client='Antigravity 2.0' AND model=? AND window_name=? AND captured_at=?", (account["id"], model, window, captured_at)).fetchone()
+            if exists:
+                continue
+            conn.execute(
+                """INSERT INTO quota_snapshots (account_id, service, client, model, window_name, remaining_percent, unit, reset_at, source, captured_at)
+                   VALUES (?, 'Antigravity', 'Antigravity 2.0', ?, ?, ?, 'provider quota', ?, 'antigravity-2.0-local-language-server', ?)""",
+                (account["id"], model, window, pct, item.get("reset_at"), captured_at),
+            )
+            changed += 1
+    return {"ok": True, "changed": changed, "matched": 1, "discovered": discovered, "email": email, "plan_tier": plan_tier}
+
+
+def sync_antigravity_2() -> dict[str, Any]:
+    return _probe_2_to_account_db(probe_antigravity_2())
+
+
+def sync_antigravity() -> dict[str, Any]:
+    cli = sync_antigravity_cli()
+    desktop = sync_antigravity_2()
+    return {"cli": cli, "desktop": desktop, "changed": int(cli.get("changed", 0)) + int(desktop.get("changed", 0)), "matched": int(cli.get("matched", 0)) + int(desktop.get("matched", 0)), "discovered": int(cli.get("discovered", 0)) + int(desktop.get("discovered", 0))}
+
+
+def current_status(email: str, client: str = "Antigravity CLI") -> dict[str, Any]:
+    if client.lower() == "antigravity 2.0":
+        with db() as conn:
+            row = conn.execute("SELECT last_seen_at FROM accounts WHERE lower(email)=? AND lower(client)=? ORDER BY id LIMIT 1", (email.lower(), client.lower())).fetchone()
+        if not row or not row["last_seen_at"]:
+            return {"connected": False, "age_seconds": None, "payload": None}
+        try:
+            age = max(0.0, (datetime.now(timezone.utc) - datetime.fromisoformat(row["last_seen_at"])).total_seconds())
+        except ValueError:
+            age = None
+        return {"connected": age is not None and age <= 60, "age_seconds": age, "payload": None}
     path = status_path(email)
     if not path.exists():
         return {"connected": False, "age_seconds": None, "payload": None}
@@ -328,7 +350,7 @@ def current_status(email: str) -> dict[str, Any]:
 
 def normalize_account(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
-    state = current_status(item["email"])
+    state = current_status(item["email"], item.get("client") or "Antigravity CLI")
     item["telemetry_age_seconds"] = state["age_seconds"]
     if item.get("provider", "").lower() == "antigravity" and state["payload"]:
         payload = state["payload"]
@@ -411,40 +433,26 @@ def connect_account(account_id: int) -> dict[str, Any]:
     client = row["client"].lower()
     if provider == "antigravity" and "cli" in client:
         setup = install_antigravity_bridge()
-        return {
-            "ok": True,
-            "mode": "global_active_session_telemetry",
-            "message": "The Antigravity CLI collector is installed globally for this local machine. Restart Antigravity CLI. AI Quota will match each active session's reported email, keep its last-known quota, and automatically discover new Antigravity accounts as you switch between them.",
-            **setup,
-        }
+        return {"ok": True, "mode": "global_active_session_telemetry", "message": "The Antigravity CLI collector is installed globally. Restart Antigravity CLI. AI Quota will match the active session's reported email and keep the last-known quota for each account.", **setup}
     if provider == "antigravity" and "2.0" in client:
-        return {
-            "ok": True,
-            "mode": "antigravity_2_0_tracked",
-            "message": "Antigravity 2.0 is now registered as a separate AI Quota client. Google documents unified authentication and a Models & Quota screen for Antigravity 2.0, but it does not currently document the CLI status-line telemetry protocol for the desktop app. AI Quota therefore keeps this account separate and will not fabricate live quota values.",
-            "next_steps": [
-                "Use Antigravity 2.0 normally with this Google account.",
-                "The account will remain visible in AI Quota as Not Connected until an authoritative 2.0 data source is available.",
-                "Antigravity CLI can still be kept and used as a separate client for the same or another account."
-            ],
-        }
-    return {
-        "ok": False,
-        "mode": "not_implemented",
-        "message": f"No direct live collector is implemented yet for {row['provider']} / {row['client']}. The account remains available for last-known snapshots.",
-    }
+        result = sync_antigravity_2()
+        if result.get("ok") and result.get("email", "").lower() == row["email"].lower():
+            return {"ok": True, "mode": "antigravity_2_0_local", "message": "Connected to the running Antigravity 2.0 local quota service. AI Quota is now reading its local quota summary instead of waiting for a screenshot or manual value.", **result}
+        if result.get("ok"):
+            return {"ok": False, "mode": "wrong_active_account", "message": f"Antigravity 2.0 is open, but its active Google account is {result.get('email')}, not {row['email']}. Switch Antigravity 2.0 to the account you registered, then press Sync now.", **result}
+        return {"ok": False, "mode": "antigravity_2_0_unavailable", "message": "Could not find a live Antigravity 2.0 local quota service. Keep Antigravity 2.0 open and signed in, then press Sync now. The collector reads only the local loopback quota service and never stores passwords or cookies.", "error": result.get("error")}
+    return {"ok": False, "mode": "not_implemented", "message": f"No direct live collector is implemented yet for {row['provider']} / {row['client']}. The account can still keep last-known snapshots."}
 
 
 @app.post("/api/sync")
 def sync() -> dict[str, Any]:
-    result = sync_antigravity()
-    return {"ok": True, **result}
+    return {"ok": True, **sync_antigravity()}
 
 
 @app.get("/api/accounts/{account_id}/snapshots")
 def account_snapshots(account_id: int) -> list[dict[str, Any]]:
     with db() as conn:
-        exists = conn.execute("SELECT 1 FROM accounts WHERE id=?", (account_id,)).fetchone()
+        exists = conn.execute("SELECT id FROM accounts WHERE id=?", (account_id,)).fetchone()
     if not exists:
         raise HTTPException(404, "Account not found")
     return latest_snapshots_for_account(account_id)
