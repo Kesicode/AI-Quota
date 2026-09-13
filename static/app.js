@@ -1,13 +1,13 @@
 const $ = (s) => document.querySelector(s);
-const esc = (v) => String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-let accounts = [];
-let snapshots = [];
-let lastSyncAt = null;
-let refreshTimer = null;
+const esc = (v) => String(v ?? '').replace(/[&<>\"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+
+let dashboard = {summary:{}, accounts:[], ranking:[]};
 let liveTimer = null;
+let refreshTimer = null;
+let lastDataAt = null;
 
 async function api(url, options = {}) {
-  const r = await fetch(url, {
+  const response = await fetch(url, {
     cache: 'no-store',
     ...options,
     headers: {
@@ -16,196 +16,233 @@ async function api(url, options = {}) {
       'Pragma': 'no-cache',
     },
   });
-  if (!r.ok) {
-    let message = `${r.status} ${r.statusText}`;
-    try { message = (await r.json()).detail || message; } catch (_) {}
+  if (!response.ok) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const body = await response.json();
+      message = body.detail || message;
+    } catch (_) {}
     throw new Error(message);
   }
-  return r.status === 204 ? null : r.json();
+  return response.status === 204 ? null : response.json();
 }
 
-function formatReset(value) {
-  if (!value) return 'Not available';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  const seconds = Math.max(0, Math.ceil((d.getTime() - Date.now()) / 1000));
-  if (seconds <= 0) return 'Ready';
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  if (days) return `${days}d ${hours}h ${mins}m`;
-  if (hours) return `${hours}h ${String(mins).padStart(2, '0')}m`;
-  if (mins) return `${mins}m ${String(secs).padStart(2, '0')}s`;
-  return `${secs}s`;
+function formatDuration(seconds) {
+  if (seconds == null || Number.isNaN(Number(seconds))) return '—';
+  let s = Math.max(0, Math.ceil(Number(seconds)));
+  if (s <= 0) return 'Ready';
+  const d = Math.floor(s / 86400); s %= 86400;
+  const h = Math.floor(s / 3600); s %= 3600;
+  const m = Math.floor(s / 60); s %= 60;
+  if (d) return `${d}d ${h}h ${m}m`;
+  if (h) return `${h}h ${String(m).padStart(2,'0')}m`;
+  if (m) return `${m}m ${String(s).padStart(2,'0')}s`;
+  return `${s}s`;
 }
 
-function pctClass(pct) {
-  if (pct == null) return '';
-  if (pct <= 10) return 'danger';
-  if (pct <= 25) return 'warning';
-  return 'good';
+function formatReset(resetAt) {
+  if (!resetAt) return { countdown: '—', timestamp: '—' };
+  const ms = new Date(resetAt).getTime() - Date.now();
+  return {
+    countdown: formatDuration(ms / 1000),
+    timestamp: new Date(resetAt).toLocaleString(),
+  };
 }
 
-function providerSnapshotsFor(accountId) {
-  return snapshots.filter(s => s.account_id === accountId && s.service === 'Antigravity');
+function statusLabel(status) {
+  return ({live:'LIVE', stale:'STALE', not_connected:'NOT CONNECTED', exhausted:'EXHAUSTED'}[status] || 'UNKNOWN');
+}
+
+function statusClass(status) {
+  return ({live:'live', stale:'stale', not_connected:'not-connected', exhausted:'exhausted'}[status] || 'unknown');
+}
+
+function bestQuota(account) {
+  const candidates = (account.snapshots || []).filter(s => s.remaining_percent != null && s.window_name !== 'Context Window');
+  if (!candidates.length) return null;
+  return candidates.reduce((best, current) => Number(current.remaining_percent) > Number(best.remaining_percent) ? current : best);
+}
+
+function renderSummary() {
+  const summary = dashboard.summary || {};
+  $('#accountCount').textContent = summary.accounts ?? 0;
+  $('#liveCount').textContent = summary.live ?? 0;
+  $('#accountStates').textContent = `${summary.live ?? 0} live · ${summary.stale ?? 0} stale · ${summary.not_connected ?? 0} not connected · ${summary.exhausted ?? 0} exhausted`;
+
+  const bestId = summary.best_account_id;
+  const best = dashboard.ranking?.find(a => a.id === bestId) || null;
+  if (!best) {
+    $('#bestAccount').textContent = 'No live quota yet';
+    $('#bestDetails').textContent = 'Connect at least one Antigravity CLI account to get a real provider reading.';
+    return;
+  }
+  const quota = bestQuota(best);
+  $('#bestAccount').textContent = best.display_name || best.email;
+  $('#bestDetails').textContent = quota
+    ? `${best.email} · ${quota.window_name} · ${Number(quota.remaining_percent).toFixed(1)}% remaining · resets ${formatReset(quota.reset_at).countdown}`
+    : `${best.email} · ${statusLabel(best.status)}`;
+}
+
+function renderQuotaRow(snapshot) {
+  const pct = snapshot.remaining_percent == null ? null : Number(snapshot.remaining_percent);
+  const reset = formatReset(snapshot.reset_at);
+  const width = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  const pctLabel = pct == null ? 'Unknown' : `${pct.toFixed(pct % 1 ? 1 : 0)}%`;
+  const unitLine = snapshot.limit_units != null
+    ? `${snapshot.used_units != null ? Number(snapshot.used_units).toLocaleString() : '—'} / ${Number(snapshot.limit_units).toLocaleString()} ${esc(snapshot.unit || '')}`
+    : (snapshot.unit ? esc(snapshot.unit) : 'Provider quota');
+  return `<div class="quota-row">
+    <div class="quota-main">
+      <div class="quota-name">${esc(snapshot.window_name)} <span>${esc(snapshot.model || '')}</span></div>
+      <div class="meter"><i style="width:${width}%"></i></div>
+      <small>${unitLine}</small>
+    </div>
+    <div class="quota-side"><strong>${pctLabel}</strong><span data-reset="${esc(snapshot.reset_at || '')}">${reset.countdown}</span><small>${reset.timestamp}</small></div>
+  </div>`;
 }
 
 function renderAccounts() {
-  $('#accountCount').textContent = accounts.length;
+  const container = $('#accounts');
+  const accounts = dashboard.accounts || [];
   if (!accounts.length) {
-    $('#accounts').innerHTML = '<div class="empty">No accounts yet. Add your first account.</div>';
+    container.innerHTML = `<div class="empty">No accounts yet. Add your 10–15 accounts here.</div>`;
     return;
   }
 
-  $('#accounts').innerHTML = accounts.map(a => {
-    const isAg = String(a.provider).toLowerCase().includes('antigravity');
-    const connected = a.antigravity_connected;
-    return `<article class="account">
-      <div class="account-head">
-        <div>
-          <div class="account-name">${esc(a.display_name || a.email)}</div>
-          <div class="account-email">${esc(a.email)}</div>
+  container.innerHTML = accounts.map(account => {
+    const quota = bestQuota(account);
+    const status = account.status || 'not_connected';
+    const snapshots = account.snapshots || [];
+    const context = snapshots.find(s => s.window_name === 'Context Window');
+    const credits = account.credits_remaining == null ? '—' : Number(account.credits_remaining).toLocaleString();
+    const liveAge = account.telemetry_age_seconds == null ? null : Number(account.telemetry_age_seconds);
+    const lastSeen = account.last_seen_at ? new Date(account.last_seen_at).toLocaleString() : 'Never';
+    const staleNote = liveAge == null ? 'No telemetry received' : `Last payload ${formatDuration(liveAge)} ago`;
+    const connectText = status === 'live' ? 'Connected' : 'Connect source';
+    return `<article class="account-card ${statusClass(status)}">
+      <div class="account-card-head">
+        <div class="account-title-wrap">
+          <span class="status-indicator"></span>
+          <div><div class="account-name">${esc(account.display_name || account.email)}</div><div class="account-email">${esc(account.email)}</div></div>
         </div>
-        <span class="pill">${esc(a.provider)}</span>
+        <div class="account-actions"><span class="state-badge">${statusLabel(status)}</span><button class="tiny-button details" data-id="${account.id}">Details</button></div>
       </div>
-      <div class="account-actions">
-        ${isAg ? `<span class="connection ${connected ? 'connected' : 'disconnected'}">${connected ? '● Live bridge' : '○ Not connected'}</span>
-        <button class="button small" data-connect="${a.id}">${connected ? 'Reconnect' : 'Connect Antigravity'}</button>` : '<span class="muted">Provider integration coming next</span>'}
+      <div class="account-meta"><span>${esc(account.provider)}</span><span>${esc(account.client || 'Provider')}</span>${account.plan_tier ? `<span>Plan: ${esc(account.plan_tier)}</span>` : ''}</div>
+      <div class="quota-summary">
+        ${quota ? `<div class="summary-box"><span>Best remaining</span><strong>${Number(quota.remaining_percent).toFixed(1)}%</strong><small>${esc(quota.window_name)} · reset ${formatReset(quota.reset_at).countdown}</small></div>` : `<div class="summary-box muted"><span>Quota</span><strong>Unknown</strong><small>${esc(staleNote)}</small></div>`}
+        <div class="summary-box"><span>Credits</span><strong>${credits}</strong><small>Only shown when a real balance is collected</small></div>
+        <div class="summary-box"><span>Context</span><strong>${context?.remaining_percent != null ? `${Number(context.remaining_percent).toFixed(1)}%` : '—'}</strong><small>${context?.used_units != null && context?.limit_units != null ? `${Number(context.used_units).toLocaleString()} / ${Number(context.limit_units).toLocaleString()} tokens` : 'Not reported'}</small></div>
       </div>
+      <div class="account-foot"><span>Last sync: ${esc(lastSeen)}</span>${account.provider.toLowerCase() === 'antigravity' && (account.client || '').toLowerCase().includes('cli') ? `<button class="button ${status === 'live' ? '' : 'primary'} connect" data-id="${account.id}">${connectText}</button>` : `<button class="button connect unsupported" data-id="${account.id}">Source setup</button>`}</div>
     </article>`;
   }).join('');
 
-  document.querySelectorAll('[data-connect]').forEach(btn => {
-    btn.onclick = async () => {
-      btn.disabled = true;
-      btn.textContent = 'Installing…';
-      try {
-        const result = await api(`/api/accounts/${btn.dataset.connect}/antigravity/connect`, {method: 'POST'});
-        alert(`${result.message}\n\nSettings: ${result.settings_path}`);
-        await load({silent: true});
-      } catch (err) {
-        alert(`Could not connect Antigravity: ${err.message}`);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Connect Antigravity';
-      }
-    };
+  container.querySelectorAll('.details').forEach(btn => btn.addEventListener('click', () => openDetails(Number(btn.dataset.id))));
+  container.querySelectorAll('.connect').forEach(btn => btn.addEventListener('click', () => connect(Number(btn.dataset.id), btn)));
+}
+
+function updateCountdowns() {
+  document.querySelectorAll('[data-reset]').forEach(el => {
+    el.textContent = formatReset(el.dataset.reset).countdown;
   });
-}
-
-function renderQuotaCards() {
-  $('#windowCount').textContent = snapshots.length;
-  if (!snapshots.length) {
-    $('#quotaCards').innerHTML = `<div class="empty quota-empty">
-      <strong>No provider quota has arrived yet.</strong>
-      <span>Add an Antigravity account, click <b>Connect Antigravity</b>, then restart/reload Antigravity CLI. Its official status-line telemetry will feed the dashboard.</span>
-    </div>`;
-    return;
-  }
-
-  const names = Object.fromEntries(accounts.map(a => [a.id, a.display_name || a.email]));
-  const groups = {};
-  for (const s of snapshots) {
-    if (!groups[s.account_id]) groups[s.account_id] = [];
-    groups[s.account_id].push(s);
-  }
-
-  $('#quotaCards').innerHTML = Object.entries(groups).map(([accountId, rows]) => `
-    <article class="quota-account">
-      <div class="quota-account-head"><div><h3>${esc(names[accountId] || accountId)}</h3><small>${esc(accounts.find(a => String(a.id) === String(accountId))?.email || '')}</small></div><span class="pill">Antigravity</span></div>
-      <div class="quota-grid">
-        ${rows.map(s => {
-          const pct = s.remaining_percent == null ? null : Number(s.remaining_percent);
-          const width = pct == null ? 0 : Math.max(0, Math.min(100, pct));
-          const units = s.used_units != null && s.limit_units != null ? `${s.used_units.toLocaleString()} / ${s.limit_units.toLocaleString()} ${esc(s.unit || '')}` : '';
-          return `<div class="quota-card ${pctClass(pct)}">
-            <div class="quota-card-top"><span>${esc(s.window_name)}</span><strong>${pct == null ? '—' : `${pct.toFixed(1)}%`}</strong></div>
-            <div class="quota-model">${esc(s.model || 'Provider bucket')}</div>
-            <div class="meter"><i style="width:${width}%"></i></div>
-            <div class="quota-meta"><span>Remaining</span><b>${pct == null ? 'Not available' : `${pct.toFixed(1)}%`}</b></div>
-            <div class="quota-meta"><span>Reset in</span><b class="reset" data-reset="${esc(s.reset_at || '')}">${formatReset(s.reset_at)}</b></div>
-            ${units ? `<div class="quota-meta"><span>Units</span><b>${units}</b></div>` : ''}
-            <div class="quota-source">${esc(s.source)} · ${new Date(s.captured_at).toLocaleTimeString()}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </article>`).join('');
-}
-
-function renderSnapshots() {
-  if (!snapshots.length) {
-    $('#snapshots').innerHTML = '<div class="empty">No captured quota snapshots yet.</div>';
-    return;
-  }
-  const names = Object.fromEntries(accounts.map(a => [a.id, a.display_name || a.email]));
-  $('#snapshots').innerHTML = `<table class="quota-table"><thead><tr><th>Account</th><th>Service / model</th><th>Window</th><th>Remaining</th><th>Reset</th><th>Captured</th></tr></thead><tbody>${snapshots.map(s => {
-    const pct = s.remaining_percent == null ? null : Number(s.remaining_percent);
-    const width = pct == null ? 0 : Math.max(0, Math.min(100, pct));
-    return `<tr><td>${esc(names[s.account_id] || s.account_id)}</td><td>${esc(s.service)}<br><small>${esc(s.model || 'All models')}</small></td><td>${esc(s.window_name)}</td><td>${pct == null ? '—' : `<b>${pct.toFixed(1)}%</b><div class="meter"><i style="width:${width}%"></i></div>`}</td><td class="reset" data-reset="${esc(s.reset_at || '')}">${formatReset(s.reset_at)}</td><td>${new Date(s.captured_at).toLocaleTimeString()}</td></tr>`;
-  }).join('')}</tbody></table>`;
-}
-
-function updateLiveClock() {
   const now = new Date();
-  const clock = $('#localClock');
-  if (clock) clock.textContent = now.toLocaleTimeString();
-  if (lastSyncAt) $('#lastSync').textContent = lastSyncAt.toLocaleTimeString();
-  document.querySelectorAll('[data-reset]').forEach(el => { el.textContent = formatReset(el.dataset.reset); });
-  document.title = `AI Quota • ${now.toLocaleTimeString()}`;
+  $('#localClock').textContent = now.toLocaleTimeString();
 }
 
-async function load({silent = false} = {}) {
+async function load(silent = false) {
   try {
-    await api('/api/sync', {method: 'POST'});
-    const [nextAccounts, nextSnapshots] = await Promise.all([api('/api/accounts'), api('/api/snapshots')]);
-    accounts = nextAccounts;
-    snapshots = nextSnapshots;
-    lastSyncAt = new Date();
+    dashboard = await api('/api/dashboard');
+    lastDataAt = new Date();
+    renderSummary();
     renderAccounts();
-    renderQuotaCards();
-    renderSnapshots();
-    updateLiveClock();
-  } catch (e) {
-    console.error(e);
-    if (!silent) alert(`Could not load AI Quota data: ${e.message}`);
+    updateCountdowns();
+  } catch (error) {
+    console.error(error);
+    if (!silent) alert(`Could not load AI Quota: ${error.message}`);
   }
+}
+
+async function syncNow() {
+  const button = $('#sync');
+  button.disabled = true;
+  const old = button.textContent;
+  button.textContent = 'Syncing…';
+  try {
+    await api('/api/sync', {method:'POST'});
+    await load(false);
+  } finally {
+    button.disabled = false;
+    button.textContent = old;
+  }
+}
+
+async function connect(id, button) {
+  button.disabled = true;
+  const old = button.textContent;
+  button.textContent = 'Installing…';
+  try {
+    const result = await api(`/api/accounts/${id}/connect`, {method:'POST'});
+    if (!result.ok) {
+      alert(result.message);
+      return;
+    }
+    alert(`${result.message}\n\nSettings: ${result.settings_path}`);
+    await load(false);
+  } catch (error) {
+    alert(`Could not connect source: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = old;
+  }
+}
+
+function findAccount(id) {
+  return dashboard.accounts.find(account => Number(account.id) === Number(id));
+}
+
+function openDetails(id) {
+  const account = findAccount(id);
+  if (!account) return;
+  $('#detailName').textContent = account.display_name || account.email;
+  $('#detailMeta').textContent = `${account.email} · ${account.provider} · ${account.client || 'Provider'}`;
+  const body = $('#detailBody');
+  const snapshots = account.snapshots || [];
+  const context = snapshots.find(s => s.window_name === 'Context Window');
+  const quotaSnapshots = snapshots.filter(s => s.window_name !== 'Context Window');
+  body.innerHTML = `<div class="detail-grid">
+    <div class="detail-stat"><span>Status</span><strong class="${statusClass(account.status)}-text">${statusLabel(account.status)}</strong></div>
+    <div class="detail-stat"><span>Plan</span><strong>${esc(account.plan_tier || 'Unknown')}</strong></div>
+    <div class="detail-stat"><span>Credits</span><strong>${account.credits_remaining == null ? 'Unknown' : Number(account.credits_remaining).toLocaleString()}</strong></div>
+    <div class="detail-stat"><span>Last telemetry</span><strong>${account.last_seen_at ? new Date(account.last_seen_at).toLocaleString() : 'Never'}</strong></div>
+  </div>
+  <section class="detail-section"><h3>Quota windows</h3>${quotaSnapshots.length ? quotaSnapshots.map(renderQuotaRow).join('') : '<div class="empty compact">No provider quota snapshot collected yet.</div>'}</section>
+  <section class="detail-section"><h3>Context window</h3>${context ? renderQuotaRow(context) : '<div class="empty compact">No context token data collected yet.</div>'}</section>`;
+  $('#detailDialog').showModal();
 }
 
 $('#addAccount').onclick = () => $('#accountDialog').showModal();
+$('#closeDetail').onclick = () => $('#detailDialog').close();
+$('#sync').onclick = syncNow;
 
-$('#accountForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const form = e.currentTarget;
-  const submitButton = form.querySelector('button[value="default"]');
+$('#accountForm').onsubmit = async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[value="default"]');
   const data = Object.fromEntries(new FormData(form));
-  if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Saving…'; }
+  button.disabled = true;
   try {
-    await api('/api/accounts', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+    await api('/api/accounts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     form.reset();
-    form.querySelector('[name="provider"]').value = 'Antigravity';
     $('#accountDialog').close();
-    await load({silent: true});
-  } catch (err) {
-    alert(`Could not add account: ${err.message}`);
+    await load(false);
+  } catch (error) {
+    alert(`Could not add account: ${error.message}`);
   } finally {
-    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Save'; }
+    button.disabled = false;
   }
 };
 
-$('#refresh').onclick = async () => {
-  const button = $('#refresh');
-  button.disabled = true;
-  const original = button.textContent;
-  button.textContent = 'Refreshing…';
-  try { await load(); } finally { button.disabled = false; button.textContent = original; }
-};
-
-function startLiveUpdates() {
-  if (!liveTimer) liveTimer = setInterval(updateLiveClock, 1000);
-  if (!refreshTimer) refreshTimer = setInterval(() => load({silent: true}), 5000);
-}
-
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load({silent: true}); });
-startLiveUpdates();
-load({silent: true});
+if (!liveTimer) liveTimer = setInterval(updateCountdowns, 1000);
+if (!refreshTimer) refreshTimer = setInterval(() => load(true), 5000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(true); });
+load(true);
