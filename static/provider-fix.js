@@ -1,6 +1,9 @@
 (() => {
   const clean = (s) => String(s || '').trim().toLowerCase();
-  let patchScheduled = false;
+
+  function setTextIfChanged(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
 
   function isCloudCodeCard(card) {
     const meta = clean(card.querySelector('.account-meta')?.textContent);
@@ -14,29 +17,30 @@
       const summary = card.querySelector('.quota-summary');
       const first = summary?.querySelector('.summary-box');
       if (!first) return;
+
       const label = first.querySelector('span');
       const strong = first.querySelector('strong');
       const small = first.querySelector('small');
-      if (label) label.textContent = 'Cloud Code weekly';
-      if (strong && (clean(strong.textContent).includes('%') || clean(strong.textContent).includes('unknown') || !clean(strong.textContent).includes('h'))) {
-        strong.textContent = '50 h / week';
-      }
-      if (small) {
-        small.textContent = '50-hour weekly allowance · current remaining hours appear only when collected from the official Cloud Code Usage Quota source.';
-      }
       const note = card.querySelector('.provider-note');
-      if (note) note.textContent = 'Cloud Code weekly usage is measured in hours, not Gemini model quota.';
+
+      setTextIfChanged(label, 'Cloud Code weekly');
+      const currentValue = clean(strong?.textContent);
+      if (strong && (currentValue.includes('%') || currentValue.includes('unknown') || !currentValue.includes('h'))) {
+        setTextIfChanged(strong, '50 h / week');
+      }
+      setTextIfChanged(small, '50-hour weekly allowance · current remaining hours appear only when collected from the official Cloud Code Usage Quota source.');
+      setTextIfChanged(note, 'Cloud Code weekly usage is measured in hours, not Gemini model quota.');
       card.classList.add('cloud-code-card');
     });
   }
 
   function patchPriorityCard() {
     const hero = document.querySelector('#cloudCodeHeroDetails');
-    if (hero) {
-      hero.textContent = 'Cloud Code / Cloud Shell: 50 hours per week. The official Usage Quota view shows hours remaining, total hours and the weekly reset date/time.';
-    }
+    setTextIfChanged(hero, 'Cloud Code / Cloud Shell: 50 hours per week. The official Usage Quota view shows hours remaining, total hours and the weekly reset date/time.');
+
     document.querySelectorAll('.provider-card-primary p').forEach((p) => {
-      p.innerHTML = 'Cloud Code has a default weekly quota of <strong>50 hours</strong>. The official Usage Quota view shows hours remaining, total hours and the weekly reset date/time.';
+      const value = 'Cloud Code has a default weekly quota of 50 hours. The official Usage Quota view shows hours remaining, total hours and the weekly reset date/time.';
+      setTextIfChanged(p, value);
     });
   }
 
@@ -55,21 +59,14 @@
     patchCloudCodeCards();
   }
 
-  function schedulePatch() {
-    if (patchScheduled) return;
-    patchScheduled = true;
-    requestAnimationFrame(() => {
-      patchScheduled = false;
-      patchAll();
-    });
+  function start() {
+    patchAll();
+    // The main app re-renders account cards after every provider refresh.
+    // Polling is intentionally used instead of observing the account subtree,
+    // avoiding a MutationObserver feedback loop that can freeze the page.
+    window.setInterval(patchAll, 1000);
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    patchAll();
-    const accounts = document.querySelector('#accounts');
-    if (accounts) {
-      const observer = new MutationObserver(schedulePatch);
-      observer.observe(accounts, {childList: true, subtree: true});
-    }
-  }, {once: true});
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});
+  else start();
 })();
