@@ -27,7 +27,7 @@
       <article class="hero-card best-card">
         <div class="label">BEST AVAILABLE</div>
         <div id="bestAccount">No live quota yet</div>
-        <small id="bestDetails">Connect your Antigravity CLI account(s) to populate live data.</small>
+        <small id="bestDetails">Connect your provider account(s) to populate live data.</small>
       </article>
       <article class="hero-card"><span class="label">ACCOUNTS</span><strong id="accountCount">0</strong><small id="accountStates">0 live · 0 stale · 0 not connected</small></article>
       <article class="hero-card"><span class="label">LIVE SOURCES</span><strong id="liveCount">0</strong><small>Provider telemetry seen in the last 60 seconds.</small></article>
@@ -37,7 +37,7 @@
       <div class="panel-head">
         <div>
           <h2>Accounts</h2>
-          <p>Each email is independent. A live provider payload is matched to the reported email automatically. Switch accounts in the provider normally; AI Quota keeps the last known snapshot for every email it sees.</p>
+          <p>Each email is independent. A live provider payload is matched to the reported email automatically. Switch accounts normally; AI Quota keeps the last known snapshot for every email it sees.</p>
         </div>
         <div class="legend"><span class="dot green"></span> live <span class="dot yellow"></span> stale <span class="dot gray"></span> not connected <span class="dot red"></span> exhausted</div>
       </div>
@@ -45,12 +45,12 @@
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>What AI Quota knows</h2><p>Unknown is shown as unknown. We never invent a quota value.</p></div></div>
+      <div class="panel-head"><div><h2>Provider / client coverage</h2><p>Clients are tracked separately. A client is never marked live unless AI Quota has an authoritative data source for it.</p></div></div>
       <div class="info-grid">
-        <div><strong>Antigravity CLI</strong><span>Live collector available through the official status-line JSON payload.</span></div>
-        <div><strong>Antigravity IDE</strong><span>Tracked as a separate client. Direct live collector is not claimed unless a supported telemetry source is available.</span></div>
-        <div><strong>VS Code / Copilot</strong><span>Separate provider adapter. Last-known data can be stored without pretending it is live.</span></div>
-        <div><strong>Credits</strong><span>Displayed only when a provider collector supplies a real balance.</span></div>
+        <div><strong>Antigravity CLI</strong><span>Live collector through the official status-line JSON payload, including model quota, reset times, plan, account email and context token usage.</span></div>
+        <div><strong>Antigravity 2.0</strong><span>Supported as its own tracked client. Antigravity documents unified authentication and the Models &amp; Quota view, but does not document the CLI status-line protocol for the desktop app, so AI Quota will not fake a live reading here.</span></div>
+        <div><strong>Antigravity IDE</strong><span>Tracked as a separate client. Live collection is only enabled once an authoritative local/provider surface exists.</span></div>
+        <div><strong>VS Code / Copilot / Gemini / Cloud / Codex</strong><span>Separate provider adapters. Each source is shown independently and unknown values remain unknown.</span></div>
       </div>
     </section>
 
@@ -65,7 +65,7 @@
       <h2>Add account</h2>
       <label>Email<input name="email" type="email" required maxlength="320" placeholder="you@example.com"></label>
       <label>Provider<select name="provider"><option>Antigravity</option><option>Gemini API</option><option>Google Cloud</option><option>GitHub Copilot</option><option>OpenAI / Codex</option><option>Other</option></select></label>
-      <label>Client<select name="client"><option>Antigravity CLI</option><option>Antigravity IDE</option><option>VS Code</option><option>GitHub Copilot</option><option>Gemini API</option><option>Google Cloud</option><option>Codex</option><option>Other</option></select></label>
+      <label>Client<select name="client"><option>Antigravity CLI</option><option>Antigravity 2.0</option><option>Antigravity IDE</option><option>VS Code</option><option>GitHub Copilot</option><option>Gemini API</option><option>Google Cloud</option><option>Codex</option><option>Other</option></select></label>
       <label>Display name<input name="display_name" maxlength="120" placeholder="Personal / Work / Account 01"></label>
       <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save account</button></div>
     </form>
