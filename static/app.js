@@ -59,6 +59,13 @@ function bestQuota(account) {
   return candidates.reduce((best, current) => Number(current.remaining_percent) > Number(best.remaining_percent) ? current : best);
 }
 
+function clientKind(account) {
+  const client = String(account.client || '').toLowerCase();
+  if (client.includes('antigravity 2.0')) return 'antigravity2';
+  if (client.includes('cli')) return 'cli';
+  return 'other';
+}
+
 function renderSummary() {
   const summary = dashboard.summary || {};
   $('#accountCount').textContent = summary.accounts ?? 0;
@@ -68,7 +75,7 @@ function renderSummary() {
   const best = dashboard.ranking?.find(a => a.id === bestId) || null;
   if (!best) {
     $('#bestAccount').textContent = 'No live quota yet';
-    $('#bestDetails').textContent = 'Enable a supported collector to receive real provider telemetry.';
+    $('#bestDetails').textContent = 'Open Antigravity 2.0 or Antigravity CLI and press Sync now.';
     return;
   }
   const quota = bestQuota(best);
@@ -96,19 +103,6 @@ function renderQuotaRow(snapshot) {
   </div>`;
 }
 
-function sourceButton(account) {
-  const provider = (account.provider || '').toLowerCase();
-  const client = (account.client || '').toLowerCase();
-  if (provider === 'antigravity' && client.includes('cli')) {
-    const label = account.status === 'live' ? 'CLI collector on' : 'Enable CLI collector';
-    return `<button class="button ${account.status === 'live' ? '' : 'primary'} connect" data-id="${account.id}">${label}</button>`;
-  }
-  if (provider === 'antigravity' && client.includes('2.0')) {
-    return `<button class="button connect setup-20" data-id="${account.id}">Antigravity 2.0 setup</button>`;
-  }
-  return `<button class="button connect unsupported" data-id="${account.id}">Source setup</button>`;
-}
-
 function renderAccounts() {
   const container = $('#accounts');
   const accounts = dashboard.accounts || [];
@@ -124,6 +118,9 @@ function renderAccounts() {
     const credits = account.credits_remaining == null ? '—' : Number(account.credits_remaining).toLocaleString();
     const lastSeen = account.last_seen_at ? new Date(account.last_seen_at).toLocaleString() : 'Never';
     const staleNote = account.telemetry_age_seconds == null ? 'No telemetry received' : `Last payload ${formatDuration(account.telemetry_age_seconds)} ago`;
+    const kind = clientKind(account);
+    const actionLabel = kind === 'cli' ? (status === 'live' ? 'CLI collector on' : 'Enable CLI collector') : kind === 'antigravity2' ? (status === 'live' ? '2.0 connected · Sync' : 'Connect 2.0') : 'Source setup';
+    const actionClass = kind === 'other' ? ' unsupported' : (status === 'live' ? '' : ' primary');
     return `<article class="account-card ${statusClass(status)}">
       <div class="account-card-head">
         <div class="account-title-wrap">
@@ -132,17 +129,17 @@ function renderAccounts() {
         </div>
         <div class="account-actions"><span class="state-badge">${statusLabel(status)}</span><button class="tiny-button details" data-id="${account.id}">Details</button></div>
       </div>
-      <div class="account-meta"><span>${esc(account.provider)}</span><span>${esc(account.client || 'Provider')}</span>${account.plan_tier ? `<span>Plan: ${esc(account.plan_tier)}</span>` : ''}${account.model ? `<span>Model: ${esc(account.model)}</span>` : ''}</div>
+      <div class="account-meta"><span>${esc(account.provider)}</span><span>${esc(account.client || 'Provider')}</span>${account.plan_tier ? `<span>Plan: ${esc(account.plan_tier)}</span>` : ''}</div>
       <div class="quota-summary">
         ${quota ? `<div class="summary-box"><span>Best remaining</span><strong>${Number(quota.remaining_percent).toFixed(1)}%</strong><small>${esc(quota.window_name)} · reset ${formatReset(quota.reset_at).countdown}</small></div>` : `<div class="summary-box muted"><span>Quota</span><strong>Unknown</strong><small>${esc(staleNote)}</small></div>`}
         <div class="summary-box"><span>Credits</span><strong>${credits}</strong><small>Only shown when a real balance is collected</small></div>
         <div class="summary-box"><span>Context</span><strong>${context?.remaining_percent != null ? `${Number(context.remaining_percent).toFixed(1)}%` : '—'}</strong><small>${context?.used_units != null && context?.limit_units != null ? `${Number(context.used_units).toLocaleString()} / ${Number(context.limit_units).toLocaleString()} tokens` : 'Not reported'}</small></div>
       </div>
-      <div class="account-foot"><span>Last sync: ${esc(lastSeen)}</span>${sourceButton(account)}</div>
+      <div class="account-foot"><span>Last sync: ${esc(lastSeen)}</span><button class="button${actionClass} connect" data-id="${account.id}" data-kind="${kind}">${actionLabel}</button></div>
     </article>`;
   }).join('');
   container.querySelectorAll('.details').forEach(btn => btn.addEventListener('click', () => openDetails(Number(btn.dataset.id))));
-  container.querySelectorAll('.connect').forEach(btn => btn.addEventListener('click', () => connect(Number(btn.dataset.id), btn)));
+  container.querySelectorAll('.connect').forEach(btn => btn.addEventListener('click', () => connect(Number(btn.dataset.id), btn, btn.dataset.kind)));
 }
 
 function updateCountdowns() {
@@ -174,43 +171,51 @@ async function syncNow() {
   finally { button.disabled = false; button.textContent = old; }
 }
 
-async function installGlobalCollector(accountId, button) {
+async function installCliCollector(accountId, button) {
   button.disabled = true;
   const old = button.textContent;
   button.textContent = 'Installing…';
   try {
     const result = await api(`/api/accounts/${accountId}/connect`, {method:'POST'});
     if (!result.ok) { alert(result.message); return; }
-    alert(`${result.message}${result.next_steps ? `\n\n${result.next_steps.join('\n')}` : ''}`);
+    alert(`${result.message}\n\nRestart Antigravity CLI, then return here.`);
     await load(false);
   } catch (error) {
-    alert(`Could not enable the collector: ${error.message}`);
+    alert(`Could not enable the CLI collector: ${error.message}`);
   } finally { button.disabled = false; button.textContent = old; }
 }
 
-async function showAntigravity20Setup(accountId, button) {
+async function connectDesktop(id, button) {
   button.disabled = true;
+  const old = button.textContent;
+  button.textContent = 'Connecting…';
   try {
-    const result = await api(`/api/accounts/${accountId}/connect`, {method:'POST'});
-    alert(`${result.message}${result.next_steps ? `\n\n${result.next_steps.join('\n')}` : ''}`);
+    const result = await api(`/api/accounts/${id}/connect`, {method:'POST'});
+    if (!result.ok) {
+      alert(`${result.message || 'Antigravity 2.0 is not ready.'}${result.error ? `\n\nTechnical detail: ${result.error}` : ''}`);
+      return;
+    }
+    await load(false);
+    alert(`Connected to Antigravity 2.0 for ${result.email}.\n\nThe quota values shown now come from the local Antigravity quota service.`);
   } catch (error) {
-    alert(`Could not open Antigravity 2.0 setup: ${error.message}`);
-  } finally { button.disabled = false; }
+    alert(`Could not connect Antigravity 2.0: ${error.message}`);
+  } finally { button.disabled = false; button.textContent = old; }
 }
 
-async function connect(id, button) {
-  if (button.classList.contains('setup-20')) return showAntigravity20Setup(id, button);
-  await installGlobalCollector(id, button);
+async function connect(id, button, kind) {
+  if (kind === 'cli') return installCliCollector(id, button);
+  if (kind === 'antigravity2') return connectDesktop(id, button);
+  alert('No direct collector is implemented for this client yet. The account can still keep last-known snapshots.');
 }
 
 async function enableGlobalCollector() {
   const account = dashboard.accounts.find(a => a.provider?.toLowerCase() === 'antigravity' && a.client?.toLowerCase().includes('cli'));
   if (!account) {
-    alert('Add at least one Antigravity CLI account first. The CLI collector is global and follows whichever Antigravity CLI account is currently active.');
+    alert('Add at least one Antigravity CLI account first.');
     $('#accountDialog').showModal();
     return;
   }
-  await installGlobalCollector(account.id, $('#enableAntigravity'));
+  await installCliCollector(account.id, $('#enableAntigravity'));
 }
 
 function findAccount(id) { return dashboard.accounts.find(account => Number(account.id) === Number(id)); }
