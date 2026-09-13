@@ -17,8 +17,9 @@
       </div>
       <div class="top-actions">
         <div class="live-clock"><span class="live-dot"></span><span id="localClock">—</span></div>
+        <button id="enableAntigravity" class="button primary">Enable Antigravity CLI collector</button>
         <button id="sync" class="button">Sync now</button>
-        <button id="addAccount" class="button primary">+ Add account</button>
+        <button id="addAccount" class="button">+ Add account</button>
       </div>
     </header>
 
@@ -36,7 +37,7 @@
       <div class="panel-head">
         <div>
           <h2>Accounts</h2>
-          <p>Each email is independent. A live provider payload is matched to the reported email automatically.</p>
+          <p>Each email is independent. A live provider payload is matched to the reported email automatically. Switch accounts in the provider normally; AI Quota keeps the last known snapshot for every email it sees.</p>
         </div>
         <div class="legend"><span class="dot green"></span> live <span class="dot yellow"></span> stale <span class="dot gray"></span> not connected <span class="dot red"></span> exhausted</div>
       </div>
