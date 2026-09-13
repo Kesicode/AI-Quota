@@ -1,7 +1,6 @@
 (() => {
   const modalHistoryKey = '__aiquota_modal';
   let suppressHistoryClose = false;
-  let observer;
 
   const dialogs = () => Array.from(document.querySelectorAll('dialog'));
   const openDialog = () => dialogs().find((dialog) => dialog.open) || null;
@@ -29,11 +28,7 @@
     }
   }
 
-  function handleDialogStateChange(dialog) {
-    if (dialog.open) {
-      pushModalHistory(dialog);
-      return;
-    }
+  function handleDialogClosed(dialog) {
     if (suppressHistoryClose) return;
     if (history.state?.[modalHistoryKey] === dialog.id) {
       window.setTimeout(() => history.back(), 0);
@@ -45,8 +40,6 @@
     dialog.dataset.aiquotaModalWired = '1';
 
     dialog.addEventListener('pointerdown', (event) => {
-      // Native <dialog> exposes the backdrop as the dialog itself in browsers that
-      // support ::backdrop. Clicking exactly outside the dialog contents closes it.
       if (event.target === dialog) closeDialog(dialog);
     });
 
@@ -55,11 +48,11 @@
     });
 
     dialog.addEventListener('cancel', () => {
-      // Esc is treated like an ordinary close; the observer will clean the
-      // corresponding history entry.
+      // Allow the browser's native Escape handling to close the dialog.
+      // The close event below removes the modal history entry.
     });
 
-    dialog.addEventListener('close', () => handleDialogStateChange(dialog));
+    dialog.addEventListener('close', () => handleDialogClosed(dialog));
   }
 
   function wireAll() {
@@ -79,7 +72,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     wireAll();
-    observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (mutation.type === 'childList') {
           mutation.addedNodes.forEach((node) => {
@@ -89,14 +82,12 @@
             }
           });
         }
-        if (mutation.type === 'attributes' && mutation.attributeName === 'open' && mutation.target.matches?.('dialog')) {
-          handleDialogStateChange(mutation.target);
+        if (mutation.type === 'attributes' && mutation.attributeName === 'open' && mutation.target.matches?.('dialog') && mutation.target.open) {
+          pushModalHistory(mutation.target);
         }
       }
     });
     observer.observe(document.body, {subtree: true, childList: true, attributes: true, attributeFilter: ['open']});
-
-    // If the page was restored with a modal history state, restore the modal.
     restoreModalFromHistory();
   });
 })();
