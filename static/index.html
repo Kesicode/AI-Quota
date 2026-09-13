@@ -13,7 +13,7 @@
       <div>
         <div class="eyebrow">LOCAL AI CONTROL CENTER</div>
         <h1>AI Quota</h1>
-        <p>All accounts. Last-known quota. Live reset timers. No random account testing.</p>
+        <p>All accounts. Live quota when available. Last-known snapshots when not. No random account testing.</p>
       </div>
       <div class="top-actions">
         <div class="live-clock"><span class="live-dot"></span><span id="localClock">—</span></div>
@@ -34,12 +34,31 @@
     </section>
 
     <section class="panel account-panel">
-      <div class="panel-head">
+      <div class="panel-head account-toolbar">
         <div>
           <h2>Accounts</h2>
-          <p>Each email is independent. A live provider payload is matched to the reported email automatically. Switch accounts normally; AI Quota keeps the last known snapshot for every email it sees.</p>
+          <p>Manage your account registry without storing passwords or browser sessions.</p>
         </div>
+        <div class="toolbar-controls">
+          <input id="accountSearch" class="toolbar-input" type="search" placeholder="Search email, name, client…" aria-label="Search accounts">
+          <select id="statusFilter" class="toolbar-select" aria-label="Filter account status">
+            <option value="all">All statuses</option>
+            <option value="live">Live</option>
+            <option value="stale">Stale</option>
+            <option value="not_connected">Not connected</option>
+            <option value="exhausted">Exhausted</option>
+          </select>
+          <select id="sortAccounts" class="toolbar-select" aria-label="Sort accounts">
+            <option value="best">Best available</option>
+            <option value="name">Name</option>
+            <option value="status">Status</option>
+            <option value="client">Client</option>
+          </select>
+        </div>
+      </div>
+      <div class="account-subbar">
         <div class="legend"><span class="dot green"></span> live <span class="dot yellow"></span> stale <span class="dot gray"></span> not connected <span class="dot red"></span> exhausted</div>
+        <div id="visibleCount" class="visible-count">0 shown</div>
       </div>
       <div id="accounts" class="accounts"></div>
     </section>
@@ -47,10 +66,10 @@
     <section class="panel">
       <div class="panel-head"><div><h2>Provider / client coverage</h2><p>Clients are tracked separately. A client is never marked live unless AI Quota has an authoritative data source for it.</p></div></div>
       <div class="info-grid">
-        <div><strong>Antigravity CLI</strong><span>Live collector through the official status-line JSON payload, including model quota, reset times, plan, account email and context token usage.</span></div>
-        <div><strong>Antigravity 2.0</strong><span>Live local collector probes the running desktop app's loopback language-server quota service and reads the same quota summary used by the Models &amp; Usage surface. It does not scrape screenshots or ask for passwords.</span></div>
-        <div><strong>Antigravity IDE</strong><span>Tracked as a separate client. Live collection is only enabled once an authoritative local/provider surface exists.</span></div>
-        <div><strong>VS Code / Copilot / Gemini / Cloud / Codex</strong><span>Separate provider adapters. Each source is shown independently and unknown values remain unknown.</span></div>
+        <div><strong>Antigravity CLI</strong><span>Live collector through the documented status-line JSON payload, including model quota, reset times, plan, account email and context token usage.</span></div>
+        <div><strong>Antigravity 2.0</strong><span>Live local collector probes the running desktop app's loopback language-server quota service and reads the quota summary used by Models &amp; Usage.</span></div>
+        <div><strong>Antigravity IDE</strong><span>Tracked separately. Live collection is only enabled when a supported authoritative local/provider surface exists.</span></div>
+        <div><strong>VS Code / Copilot / Gemini / Cloud / Codex</strong><span>Separate provider adapters. Unknown values remain unknown instead of being guessed.</span></div>
       </div>
     </section>
 
@@ -76,6 +95,15 @@
       <div class="detail-head"><div><div id="detailName" class="detail-name">Account</div><div id="detailMeta" class="detail-meta"></div></div><button id="closeDetail" class="button">Close</button></div>
       <div id="detailBody"></div>
     </div>
+  </dialog>
+
+  <dialog id="deleteDialog" class="danger-dialog">
+    <form method="dialog" id="deleteForm">
+      <div class="danger-icon">!</div>
+      <h2>Delete registered account?</h2>
+      <p id="deleteMessage">This removes the account and its stored quota history from this local AI Quota instance.</p>
+      <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button id="confirmDelete" value="default" class="button danger-button">Delete account</button></div>
+    </form>
   </dialog>
 
   <script src="/static/app.js"></script>
