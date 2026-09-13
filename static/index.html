@@ -15,13 +15,19 @@
         <h1>AI Quota</h1>
         <p>One place for accounts, limits, reset windows, credits and usage history.</p>
       </div>
-      <button id="refresh" class="button">Refresh</button>
+      <div class="top-actions">
+        <div class="live-clock" title="Your computer's current local time">
+          <span class="live-dot"></span>
+          <span id="localClock">—</span>
+        </div>
+        <button id="refresh" class="button">Refresh</button>
+      </div>
     </header>
 
     <section class="stats">
       <article><span>Accounts</span><strong id="accountCount">0</strong></article>
       <article><span>Tracked windows</span><strong id="windowCount">0</strong></article>
-      <article><span>Last sync</span><strong id="lastSync">—</strong></article>
+      <article><span>Last data sync</span><strong id="lastSync">—</strong></article>
     </section>
 
     <section class="panel">
@@ -33,7 +39,7 @@
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>Quota windows</h2><p>Provider-reported values are shown with their source and capture time.</p></div></div>
+      <div class="panel-head"><div><h2>Quota windows</h2><p>Provider-reported values are shown with their source and capture time. Reset countdowns update every second.</p></div></div>
       <div id="snapshots" class="table-wrap"></div>
     </section>
 
