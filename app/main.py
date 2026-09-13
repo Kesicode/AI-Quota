@@ -177,10 +177,6 @@ def ignored(conn: sqlite3.Connection, email: str, provider: str, client: str) ->
     return conn.execute("SELECT 1 FROM ignored_accounts WHERE email=? AND provider=? AND client=?", (email.lower(), provider.lower(), client.lower())).fetchone() is not None
 
 
-def remove_ignore(conn: sqlite3.Connection, email: str, provider: str, client: str) -> None:
-    conn.execute("DELETE FROM ignored_accounts WHERE email=? AND provider=? AND client=?", (email.lower(), provider.lower(), client.lower()))
-
-
 def ensure_account(conn: sqlite3.Connection, email: str, client: str, provider: str = "Antigravity") -> sqlite3.Row | None:
     email = email.strip().lower(); provider = provider.strip(); client = client.strip()
     row = conn.execute("SELECT * FROM accounts WHERE lower(email)=? AND lower(provider)=? AND lower(client)=? ORDER BY id LIMIT 1", (email, provider.lower(), client.lower())).fetchone()
@@ -248,8 +244,23 @@ def sync_desktop() -> dict[str, Any]:
 
 
 def sync_all() -> dict[str, Any]:
-    cli = sync_cli(); desktop = sync_desktop()
-    return {"ok":True,"cli":cli,"desktop":desktop,"changed":int(cli.get("changed",0))+int(desktop.get("changed",0)),"matched":int(cli.get("matched",0))+int(desktop.get("matched",0)),"discovered":int(cli.get("discovered",0))+int(desktop.get("discovered",0))}
+    # One broken provider must never stop the local dashboard or prevent account management.
+    try:
+        cli = sync_cli()
+    except Exception as exc:
+        cli = {"changed": 0, "matched": 0, "discovered": 0, "ok": False, "error": str(exc)}
+    try:
+        desktop = sync_desktop()
+    except Exception as exc:
+        desktop = {"ok": False, "changed": 0, "matched": 0, "discovered": 0, "error": str(exc)}
+    return {
+        "ok": bool(cli.get("ok", True) or desktop.get("ok", False)),
+        "cli": cli,
+        "desktop": desktop,
+        "changed": int(cli.get("changed", 0)) + int(desktop.get("changed", 0)),
+        "matched": int(cli.get("matched", 0)) + int(desktop.get("matched", 0)),
+        "discovered": int(cli.get("discovered", 0)) + int(desktop.get("discovered", 0)),
+    }
 
 
 def current_status(email: str, client: str) -> tuple[float | None, dict[str, Any] | None]:
@@ -287,7 +298,9 @@ def normalize(row: sqlite3.Row) -> dict[str, Any]:
 
 @app.on_event("startup")
 def startup() -> None:
-    init_db(); sync_all()
+    # Start the local registry immediately. Provider synchronization is explicit
+    # through /api/sync or the dashboard's normal refresh path.
+    init_db()
 
 
 @app.get("/")
@@ -300,7 +313,7 @@ def health() -> dict[str, Any]: return {"status":"ok","app":"AI Quota","time":no
 
 @app.get("/api/accounts")
 def accounts() -> list[dict[str, Any]]:
-    sync_all()
+    # Account registration/readback is intentionally independent of live collectors.
     with db() as conn: rows = conn.execute("SELECT * FROM accounts ORDER BY id").fetchall()
     return [normalize(r) for r in rows]
 
@@ -308,6 +321,8 @@ def accounts() -> list[dict[str, Any]]:
 @app.post("/api/accounts", status_code=201)
 def add_account(item: AccountIn) -> dict[str, Any]:
     email=item.email.strip().lower(); provider=item.provider.strip(); client=item.client.strip()
+    if not email or not provider or not client:
+        raise HTTPException(422,"Email/identity, provider and client are required")
     with db() as conn:
         conn.execute("DELETE FROM ignored_accounts WHERE email=? AND provider=? AND client=?", (email,provider.lower(),client.lower()))
         if conn.execute("SELECT 1 FROM accounts WHERE lower(email)=? AND lower(client)=?", (email,client.lower())).fetchone(): raise HTTPException(409,"That email/client combination is already in AI Quota")
@@ -355,8 +370,8 @@ def account_snapshots(account_id: int) -> list[dict[str, Any]]:
 
 
 @app.get("/api/dashboard")
-def dashboard() -> dict[str, Any]:
-    sync_all()
+def dashboard(sync: bool = True) -> dict[str, Any]:
+    sync_result = sync_all() if sync else {"ok": True, "changed": 0, "matched": 0, "discovered": 0}
     with db() as conn: rows=conn.execute("SELECT * FROM accounts ORDER BY id").fetchall()
     cards=[]
     for row in rows:
@@ -365,12 +380,13 @@ def dashboard() -> dict[str, Any]:
         item["best_remaining"]=max(usable) if usable else None; cards.append(item)
     rank={"live":3,"stale":2,"not_connected":1,"exhausted":0}; ranked=sorted(cards,key=lambda c:(rank.get(c.get("status"),0),float(c.get("best_remaining") or 0)),reverse=True)
     summary={"accounts":len(cards),"live":sum(c.get("status")=="live" for c in cards),"stale":sum(c.get("status")=="stale" for c in cards),"not_connected":sum(c.get("status")=="not_connected" for c in cards),"exhausted":sum(c.get("status")=="exhausted" for c in cards),"best_account_id":ranked[0]["id"] if ranked and ranked[0].get("best_remaining") is not None else None}
-    return {"summary":summary,"accounts":cards,"ranking":ranked[:10],"generated_at":now_iso()}
+    return {"summary":summary,"accounts":cards,"ranking":ranked[:10],"sync":sync_result,"generated_at":now_iso()}
 
 
 @app.get("/api/snapshots")
-def snapshots(account_id: int | None=None) -> list[dict[str,Any]]:
-    sync_all(); query="SELECT * FROM quota_snapshots"; args=()
+def snapshots(account_id: int | None=None, sync: bool = True) -> list[dict[str,Any]]:
+    if sync: sync_all()
+    query="SELECT * FROM quota_snapshots"; args=()
     if account_id is not None: query += " WHERE account_id=?"; args=(account_id,)
     query += " ORDER BY captured_at DESC LIMIT 1000"
     with db() as conn: rows=conn.execute(query,args).fetchall()
