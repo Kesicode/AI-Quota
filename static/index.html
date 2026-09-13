@@ -25,28 +25,7 @@
       </div>
     </header>
 
-    <section class="hero-grid">
-      <article class="hero-card best-card priority-card cloud-code-priority">
-        <div class="label">PRIMARY · CLOUD CODE</div>
-        <div id="cloudCodeHero">Not connected</div>
-        <small id="cloudCodeHeroDetails">Cloud Code / Cloud Shell is tracked as its own weekly-hour quota. It is never replaced with Gemini or Google Cloud project quota data.</small>
-      </article>
-      <article class="hero-card priority-card">
-        <div class="label">CODEX</div>
-        <div id="codexHero">Not connected</div>
-        <small id="codexHeroDetails">Codex usage is plan-dependent and separate from OpenAI API rate limits.</small>
-      </article>
-      <article class="hero-card">
-        <span class="label">ACCOUNTS</span>
-        <strong id="accountCount">0</strong>
-        <small id="accountStates">0 live · 0 stale · 0 not connected</small>
-      </article>
-      <article class="hero-card">
-        <span class="label">LIVE SOURCES</span>
-        <strong id="liveCount">0</strong>
-        <small>Only authoritative provider telemetry counts as live.</small>
-      </article>
-    </section>
+    <section id="smart-summary" aria-label="Account availability and recommendations"></section>
 
     <section class="panel account-panel">
       <div class="panel-head account-toolbar">
@@ -161,5 +140,6 @@
   <script src="/static/app.js"></script>
   <script src="/static/provider-fix.js"></script>
   <script src="/static/modal-behavior.js"></script>
+  <script src="/static/summary-ui.js"></script>
 </body>
 </html>
