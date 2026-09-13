@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -124,7 +123,39 @@ def bridge_path() -> Path:
 
 def bridge_script() -> str:
     absolute_status_dir = str(STATUS_DIR).replace("\\", "\\\\")
-    return f'''import hashlib, json, os, sys, tempfile\nfrom datetime import datetime, timezone\nfrom pathlib import Path\n\nSTATUS_DIR = Path(r"{absolute_status_dir}")\nSTATUS_DIR.mkdir(parents=True, exist_ok=True)\ntry:\n    payload = json.load(sys.stdin)\nexcept Exception:\n    print("AI Quota: waiting")\n    raise SystemExit(0)\nemail = str(payload.get("email") or "").strip().lower()\nif not email:\n    print("AI Quota: account unavailable")\n    raise SystemExit(0)\nkeep = {{\n    "captured_at": datetime.now(timezone.utc).isoformat(),\n    "email": email,\n    "product": payload.get("product"),\n    "version": payload.get("version"),\n    "plan_tier": payload.get("plan_tier"),\n    "model": payload.get("model"),\n    "context_window": payload.get("context_window", {{}}),\n    "quota": payload.get("quota", {{}}),\n}}\nkey = hashlib.sha256(email.encode()).hexdigest()[:24]\nout = STATUS_DIR / f"{{key}}.json"\nfd, tmp_name = tempfile.mkstemp(dir=STATUS_DIR, prefix=".aiquota-", suffix=".tmp")\nos.close(fd)\nPath(tmp_name).write_text(json.dumps(keep, separators=(",", ":")), encoding="utf-8")\nos.replace(tmp_name, out)\nprint(f"AI Quota: {{email}}")\n'''
+    return f'''import hashlib, json, os, sys, tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+STATUS_DIR = Path(r"{absolute_status_dir}")
+STATUS_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    print("AI Quota: waiting")
+    raise SystemExit(0)
+email = str(payload.get("email") or "").strip().lower()
+if not email:
+    print("AI Quota: account unavailable")
+    raise SystemExit(0)
+keep = {{
+    "captured_at": datetime.now(timezone.utc).isoformat(),
+    "email": email,
+    "product": payload.get("product"),
+    "version": payload.get("version"),
+    "plan_tier": payload.get("plan_tier"),
+    "model": payload.get("model"),
+    "context_window": payload.get("context_window", {{}}),
+    "quota": payload.get("quota", {{}}),
+}}
+key = hashlib.sha256(email.encode()).hexdigest()[:24]
+out = STATUS_DIR / f"{{key}}.json"
+fd, tmp_name = tempfile.mkstemp(dir=STATUS_DIR, prefix=".aiquota-", suffix=".tmp")
+os.close(fd)
+Path(tmp_name).write_text(json.dumps(keep, separators=(",", ":")), encoding="utf-8")
+os.replace(tmp_name, out)
+print(f"AI Quota: {{email}}")
+'''
 
 
 def install_antigravity_bridge() -> dict[str, Any]:
@@ -144,11 +175,11 @@ def install_antigravity_bridge() -> dict[str, Any]:
     if previous is not None and not backup.exists():
         backup.write_text(json.dumps(previous, indent=2), encoding="utf-8")
     command = f'"{sys.executable}" "{bridge}"'
+    # Official status-line configuration shape: type, command, enabled.
     data["statusLine"] = {
         "type": "command",
         "command": command,
         "enabled": True,
-        "stack_with_default": True,
     }
     settings.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return {"settings_path": str(settings), "bridge_path": str(bridge), "previous_saved": previous is not None}
@@ -177,24 +208,59 @@ def load_status_files() -> list[dict[str, Any]]:
     return items
 
 
+def payload_age_seconds(payload: dict[str, Any]) -> float | None:
+    raw = payload.get("captured_at")
+    if not raw:
+        return None
+    try:
+        return max(0.0, (datetime.now(timezone.utc) - datetime.fromisoformat(raw)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def ensure_discovered_account(conn: sqlite3.Connection, email: str) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT * FROM accounts WHERE lower(email)=? AND lower(provider)='antigravity' AND lower(client)='antigravity cli' ORDER BY id LIMIT 1",
+        (email,),
+    ).fetchone()
+    if row:
+        return row
+    now = now_iso()
+    cur = conn.execute(
+        """INSERT INTO accounts(email, provider, display_name, client, created_at, status, source_kind)
+           VALUES (?, 'Antigravity', ?, 'Antigravity CLI', ?, 'live', 'auto_discovered')""",
+        (email, email, now),
+    )
+    return conn.execute("SELECT * FROM accounts WHERE id=?", (cur.lastrowid,)).fetchone()
+
+
 def sync_antigravity() -> dict[str, Any]:
     changed = 0
-    matched: set[int] = set()
-    status_items = load_status_files()
+    matched = 0
+    discovered = 0
     with db() as conn:
-        accounts = conn.execute("SELECT * FROM accounts").fetchall()
-        by_email = {row["email"].strip().lower(): row for row in accounts}
-        for item in status_items:
+        for item in load_status_files():
             email = str(item.get("email") or "").strip().lower()
-            account = by_email.get(email)
-            if account is None:
+            if not email:
                 continue
-            matched.add(account["id"])
+            age = payload_age_seconds(item)
+            account = ensure_discovered_account(conn, email)
+            discovered += int(account["source_kind"] == "auto_discovered" and account["created_at"] == now_iso()) if False else 0
+            if age is None or age > 3600:
+                status = "stale"
+            else:
+                quota = item.get("quota") or {}
+                percentages = []
+                for bucket in quota.values():
+                    if isinstance(bucket, dict) and bucket.get("remaining_fraction") is not None:
+                        percentages.append(float(bucket["remaining_fraction"]) * 100.0)
+                status = "exhausted" if percentages and max(percentages) <= 0 else ("live" if age <= 60 else "stale")
+            matched += 1
             captured_at = str(item.get("captured_at") or now_iso())
             plan_tier = item.get("plan_tier")
             conn.execute(
                 "UPDATE accounts SET status=?, plan_tier=?, last_seen_at=?, last_error=NULL WHERE id=?",
-                ("live", plan_tier, captured_at, account["id"]),
+                (status, plan_tier, captured_at, account["id"]),
             )
             quota = item.get("quota") or {}
             for bucket_id, bucket in quota.items():
@@ -210,19 +276,18 @@ def sync_antigravity() -> dict[str, Any]:
                          AND window_name=? AND captured_at=?""",
                     (account["id"], "Antigravity", "Antigravity CLI", str(bucket_id), window, captured_at),
                 ).fetchone()
-                if exists:
-                    continue
-                conn.execute(
-                    """INSERT INTO quota_snapshots
-                    (account_id, service, client, model, window_name,
-                     remaining_percent, used_units, limit_units, unit, reset_at,
-                     source, captured_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (account["id"], "Antigravity", "Antigravity CLI", str(bucket_id), window,
-                     pct, None, None, "provider quota", reset_at,
-                     "antigravity-statusline", captured_at),
-                )
-                changed += 1
+                if not exists:
+                    conn.execute(
+                        """INSERT INTO quota_snapshots
+                        (account_id, service, client, model, window_name,
+                         remaining_percent, used_units, limit_units, unit, reset_at,
+                         source, captured_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (account["id"], "Antigravity", "Antigravity CLI", str(bucket_id), window,
+                         pct, None, None, "provider quota", reset_at,
+                         "antigravity-statusline", captured_at),
+                    )
+                    changed += 1
             ctx = item.get("context_window") or {}
             size = ctx.get("context_window_size")
             used_pct = ctx.get("used_percentage")
@@ -247,18 +312,24 @@ def sync_antigravity() -> dict[str, Any]:
                          "antigravity-statusline", captured_at),
                     )
                     changed += 1
-        for row in accounts:
-            if row["id"] not in matched and row["provider"].lower() == "antigravity":
-                last_seen = row["last_seen_at"]
-                if not last_seen:
-                    conn.execute("UPDATE accounts SET status='not_connected' WHERE id=?", (row["id"],))
-                else:
-                    try:
-                        age = (datetime.now(timezone.utc) - datetime.fromisoformat(last_seen)).total_seconds()
-                    except ValueError:
-                        age = 999999
-                    conn.execute("UPDATE accounts SET status=? WHERE id=?", ("stale" if age > 60 else "live", row["id"]))
-    return {"changed": changed, "matched": len(matched)}
+        # Recompute stale state for Antigravity CLI accounts that have no recent file.
+        rows = conn.execute(
+            "SELECT * FROM accounts WHERE lower(provider)='antigravity' AND lower(client)='antigravity cli'"
+        ).fetchall()
+        for row in rows:
+            path = status_path(row["email"])
+            if not path.exists():
+                if row["status"] == "live":
+                    conn.execute("UPDATE accounts SET status='stale' WHERE id=?", (row["id"],))
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                age = payload_age_seconds(payload) or 999999
+                if age > 3600:
+                    conn.execute("UPDATE accounts SET status='stale' WHERE id=?", (row["id"],))
+            except Exception:
+                conn.execute("UPDATE accounts SET status='stale' WHERE id=?", (row["id"],))
+    return {"changed": changed, "matched": matched, "discovered": discovered}
 
 
 def current_status(email: str) -> dict[str, Any]:
@@ -267,9 +338,8 @@ def current_status(email: str) -> dict[str, Any]:
         return {"connected": False, "age_seconds": None, "payload": None}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        captured = datetime.fromisoformat(payload["captured_at"])
-        age = max(0.0, (datetime.now(timezone.utc) - captured).total_seconds())
-        return {"connected": age <= 60, "age_seconds": age, "payload": payload}
+        age = payload_age_seconds(payload)
+        return {"connected": age is not None and age <= 60, "age_seconds": age, "payload": payload}
     except Exception:
         return {"connected": False, "age_seconds": None, "payload": None}
 
@@ -295,7 +365,6 @@ def latest_snapshots_for_account(account_id: int) -> list[dict[str, Any]]:
                ORDER BY captured_at DESC LIMIT 200""",
             (account_id,),
         ).fetchall()
-    # Keep one latest row per logical service/client/model/window.
     seen: set[tuple[str, str, str, str]] = set()
     result: list[dict[str, Any]] = []
     for row in rows:
@@ -335,7 +404,10 @@ def accounts() -> list[dict[str, Any]]:
 def add_account(item: AccountIn) -> dict[str, Any]:
     email = item.email.strip().lower()
     with db() as conn:
-        existing = conn.execute("SELECT id FROM accounts WHERE lower(email)=? AND lower(client)=?", (email, item.client.lower())).fetchone()
+        existing = conn.execute(
+            "SELECT id FROM accounts WHERE lower(email)=? AND lower(client)=?",
+            (email, item.client.lower()),
+        ).fetchone()
         if existing:
             raise HTTPException(409, "That email/client combination is already in AI Quota")
         cur = conn.execute(
@@ -367,14 +439,14 @@ def connect_account(account_id: int) -> dict[str, Any]:
         setup = install_antigravity_bridge()
         return {
             "ok": True,
-            "mode": "active-session-telemetry",
-            "message": "Bridge installed. Start/restart Antigravity CLI and authenticate the selected account. AI Quota will automatically match the reported email to your account list.",
+            "mode": "global_active_session_telemetry",
+            "message": "The Antigravity CLI collector is installed globally for this local machine. Restart Antigravity CLI. AI Quota will match each active session's reported email, keep its last-known quota, and automatically discover new Antigravity accounts as you switch between them.",
             **setup,
         }
     return {
         "ok": False,
         "mode": "not_implemented",
-        "message": f"No direct collector is implemented yet for {row['provider']} / {row['client']}. The account remains available for last-known snapshots.",
+        "message": f"No direct live collector is implemented yet for {row['provider']} / {row['client']}. The account can still keep last-known snapshots.",
     }
 
 
@@ -402,12 +474,18 @@ def dashboard() -> dict[str, Any]:
     cards: list[dict[str, Any]] = []
     for item in normalized:
         snaps = latest_snapshots_for_account(item["id"])
-        usable: list[float] = [float(s["remaining_percent"]) for s in snaps if s.get("remaining_percent") is not None and s["window_name"] != "Context Window"]
+        usable = [
+            float(s["remaining_percent"])
+            for s in snaps
+            if s.get("remaining_percent") is not None and s["window_name"] != "Context Window"
+        ]
         best = max(usable) if usable else None
         cards.append({**item, "snapshots": snaps, "best_remaining": best})
+
     def score(card: dict[str, Any]) -> tuple[int, float]:
         order = {"live": 3, "stale": 2, "not_connected": 1, "exhausted": 0}
         return (order.get(card.get("status"), 0), float(card.get("best_remaining") or 0.0))
+
     ranked = sorted(cards, key=score, reverse=True)
     summary = {
         "accounts": len(cards),
