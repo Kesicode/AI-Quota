@@ -289,6 +289,21 @@ $('#accountSearch')?.addEventListener('input',renderAccounts);
 $('#statusFilter')?.addEventListener('change',renderAccounts);
 $('#sortAccounts')?.addEventListener('change',renderAccounts);
 
+// Close native dialogs by clicking the backdrop (outside the dialog frame).
+// This applies to Add Account, Account Details and Delete dialogs.
+['accountDialog', 'detailDialog', 'deleteDialog'].forEach((id) => {
+  const dialog = document.getElementById(id);
+  if (!dialog) return;
+  dialog.addEventListener('click', (event) => {
+    if (event.target !== dialog) return;
+    dialog.close();
+    if (id === 'deleteDialog') pendingDeleteId = null;
+  });
+});
+
+// Escape closes dialogs naturally; keep the delete state in sync when it does.
+$('#deleteDialog')?.addEventListener('close', () => { pendingDeleteId = null; });
+
 liveTimer=setInterval(updateCountdowns,1000);
 refreshTimer=setInterval(()=>load(true),5000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(true);});
