@@ -1,5 +1,6 @@
 (() => {
   const clean = (s) => String(s || '').trim().toLowerCase();
+  let patchScheduled = false;
 
   function isCloudCodeCard(card) {
     const meta = clean(card.querySelector('.account-meta')?.textContent);
@@ -17,14 +18,11 @@
       const strong = first.querySelector('strong');
       const small = first.querySelector('small');
       if (label) label.textContent = 'Cloud Code weekly';
-      if (strong && (!strong.textContent.includes('h') || clean(strong.textContent).includes('%') || clean(strong.textContent).includes('unknown'))) {
+      if (strong && (clean(strong.textContent).includes('%') || clean(strong.textContent).includes('unknown') || !clean(strong.textContent).includes('h'))) {
         strong.textContent = '50 h / week';
       }
       if (small) {
-        const text = clean(small.textContent);
-        if (text.includes('gemini') || text.includes('weekly limit') || text.includes('most constrained') || !text.includes('cloud code')) {
-          small.textContent = '50-hour weekly allowance · current remaining hours are shown only when collected from the official Cloud Code Usage Quota source.';
-        }
+        small.textContent = '50-hour weekly allowance · current remaining hours appear only when collected from the official Cloud Code Usage Quota source.';
       }
       const note = card.querySelector('.provider-note');
       if (note) note.textContent = 'Cloud Code weekly usage is measured in hours, not Gemini model quota.';
@@ -46,10 +44,9 @@
     const accounts = document.querySelector('.account-panel');
     const priority = document.querySelector('.provider-priority-panel');
     const coverage = [...document.querySelectorAll('.panel')].find((el) => el.querySelector('h2')?.textContent.trim() === 'Provider / client coverage');
-    if (accounts && priority && coverage) {
-      accounts.insertAdjacentElement('afterend', priority);
-      priority.insertAdjacentElement('afterend', coverage);
-    }
+    if (!accounts || !priority || !coverage) return;
+    if (accounts.nextElementSibling !== priority) accounts.insertAdjacentElement('afterend', priority);
+    if (priority.nextElementSibling !== coverage) priority.insertAdjacentElement('afterend', coverage);
   }
 
   function patchAll() {
@@ -58,8 +55,21 @@
     patchCloudCodeCards();
   }
 
-  const observer = new MutationObserver(patchAll);
-  observer.observe(document.body, {subtree:true, childList:true});
-  patchAll();
-  setInterval(patchAll, 1000);
+  function schedulePatch() {
+    if (patchScheduled) return;
+    patchScheduled = true;
+    requestAnimationFrame(() => {
+      patchScheduled = false;
+      patchAll();
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    patchAll();
+    const accounts = document.querySelector('#accounts');
+    if (accounts) {
+      const observer = new MutationObserver(schedulePatch);
+      observer.observe(accounts, {childList: true, subtree: true});
+    }
+  }, {once: true});
 })();
