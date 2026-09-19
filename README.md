@@ -1,89 +1,143 @@
 # AI Quota
 
-**AI Quota** is a local-first dashboard for monitoring multiple AI and developer-tool accounts, quota windows, reset timers, context-token usage, credits, and provider health without storing account passwords or browser cookies.
+**AI Quota** is a clean, reliable, local-first, multi-account AI quota monitoring application for Windows. It provides a single unified dashboard to track multiple AI and developer-tool accounts, quota windows, reset timers, context-token usage, credits, and provider health without storing account passwords, API keys, or browser session cookies.
 
-## Important provider separation
+---
 
-The dashboard deliberately treats **Cloud Code / Cloud Shell, Google Cloud project quotas, Gemini API, OpenAI/Codex, Antigravity, and GitHub Copilot as different products and different quota authorities**.
+## Core Principles: Provider Truth & Separation
 
-This matters because a Gemini number is not a Cloud Code number, a Google Cloud project quota is not a Cloud Code weekly allowance, and a Codex usage allowance is not the OpenAI API rate limit.
+AI Quota enforces strict separation between different providers and quota authorities:
 
-### Cloud Code is the primary priority
+1. **Cloud Code / Cloud Shell $\neq$ Gemini API $\neq$ Google Cloud Project Quotas**:
+   - Cloud Code has a default **50-hour weekly usage quota** visible in Cloud Shell's session information UI.
+   - AI Quota labels Cloud Code as **official UI-derived**.
+   - It **never** substitutes Gemini API limits or GCP project quotas for Cloud Code weekly hours.
+2. **OpenAI API Limits $\neq$ Codex Usage**:
+   - Codex usage under ChatGPT plans (e.g. 5-hour and weekly allowances) is strictly separate from OpenAI developer API rate limits.
+3. **Antigravity CLI $\neq$ Antigravity 2.0**:
+   - Antigravity CLI uses statusline JSON telemetry.
+   - Antigravity 2.0 connects directly to the local desktop language server.
+   - Both are tracked as independent clients.
+4. **No Fake Numbers**:
+   - Quotas are only displayed when an authoritative source provides them. Missing data is shown honestly as **Not connected**, **Unknown**, **Stale**, or **Unavailable**—never as an invented `0%`.
+   - A configured allowance (e.g., 50h weekly) is labeled as an allowance, not as "remaining" hours unless confirmed.
 
-Cloud Code for Cloud Shell currently has a default **50-hour weekly usage quota**. Google documents the current remaining hours and reset timestamp through the Cloud Shell session information → Usage quota UI. AI Quota therefore labels Cloud Code as **official UI-derived** unless a supported machine-readable source becomes available. It must never substitute Gemini or Google Cloud project values for this allowance.
+---
 
-### Google Cloud quotas are separate
+## Provider Status
 
-Google Cloud project/service quotas are managed through Cloud Quotas and supported APIs/`gcloud` surfaces. These quotas are project/service specific and are a different data class from Cloud Code's weekly hours.
+| Product / Client | Implementation Status | Authority Classification | Source Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Antigravity 2.0** | **Live Collection** | `provider-local` | Local language server JSON-RPC (`Win32_Process` discovery) |
+| **Antigravity CLI** | **Live Collection** | `cli-local` | Status-line bridge telemetry (`~/.gemini/antigravity-cli`) |
+| **Cloud Code / Cloud Shell** | **Official UI-derived** | `official_ui_derived` | Official 50h weekly allowance documented in Cloud Shell UI |
+| **OpenAI / Codex** | **Planned** | `provider_surface` | Planned for supported OpenAI/Codex usage surfaces |
+| **Google Cloud quotas** | **Planned** | `official_api_derived` | Planned for Cloud Quotas API / `gcloud quotas info` |
+| **Gemini API** | **Planned** | `official_api_derived` | Planned for project RPM/TPM/RPD limits |
+| **GitHub Copilot** | **Planned** | `provider_surface` | Planned for Copilot subscription telemetry |
+| **VS Code** | **Host Only** | `host_client` | Host environment; quota belongs to installed extension |
 
-### Codex is separate from the OpenAI API
+For detailed specifications, see [`docs/provider-status.md`](docs/provider-status.md) and [`docs/architecture.md`](docs/architecture.md).
 
-Codex usage with a ChatGPT plan is plan-dependent and may expose 5-hour/weekly usage allowances, reset information, and credits through supported OpenAI surfaces. OpenAI API usage/rate limits are separate and must not be merged with Codex usage.
+---
 
-## Current architecture
+## Architecture & Features
 
-- FastAPI backend bound to `127.0.0.1`.
-- SQLite history for quota snapshots.
-- Account inventory designed for 10–15+ identities.
-- Per-account status: live, stale, exhausted, or not connected.
-- Live countdowns update every second in the browser.
-- Automatic dashboard refresh every 5 seconds.
-- Antigravity CLI collector through the provider's supported status-line JSON interface.
-- Antigravity 2.0 local collector through its supported local quota surface.
-- Automatic matching by provider-reported account identity where supported.
-- Last-known quota snapshots are preserved after an account is switched away.
-- Provider/client records remain separate so unsupported products are not falsely shown as live.
+- **FastAPI Backend**: Bound exclusively to `127.0.0.1:8765`.
+- **Lightweight Local SQLite**: Persistent storage for accounts, historical quota snapshots, and ignored accounts.
+- **Provider Adapter Architecture**: Fully isolated adapters implementing `ProviderAdapter`. If one provider encounters an error, other providers continue unaffected.
+- **Independent Account Registry**: Account creation (`POST /api/accounts`) and deletion are completely non-blocking and never depend on live provider collectors.
+- **Unified Frontend**: Single, authoritative state-driven renderer (`static/app.js`) with:
+  - 1-second in-place countdown updates.
+  - 5-second background polling of cached dashboard data (`/api/dashboard?sync=false`).
+  - Native HTML `<dialog>` modals with click-outside-to-close, Escape key, and browser history synchronization.
+  - Smart summary and data-driven recommendations comparing only compatible quota dimensions.
 
-## Provider truth model
+---
 
-AI Quota does not fabricate quota values. A field is shown only when a provider source supplied it. Otherwise the dashboard shows **Unknown**, **Not connected**, **Stale**, or **Unavailable**.
+## Security & Privacy Boundary
 
-Every number should retain:
+- **Local-Only**: The server binds only to `127.0.0.1`.
+- **No Credentials Stored**: Never enter passwords, browser cookies, OAuth tokens, or API keys into AI Quota.
+- **Sanitized Logging**: Local logs automatically redact bearer tokens, API keys, passwords, and cookies.
+- **No Abuse**: AI Quota is designed for personal quota visibility. It never automates account rotation to bypass provider limits.
 
-- product/client identity
-- account or project identity
-- source
-- capture timestamp
-- confidence/authority type
+---
 
-## Security
+## Setup & Running on Windows
 
-- Never store Google/Gmail passwords.
-- Never store browser session cookies.
-- Never put API keys or refresh tokens in frontend JavaScript or the SQLite database.
-- Keep the server local by default.
-- Store only provider telemetry required for monitoring.
-- Keep local databases, telemetry, logs, and environment files out of Git.
-- Never automate account rotation to bypass provider limits.
-
-## Run on Windows
-
+### Option 1: One-Click Run
 ```bat
 run.bat
 ```
+Then open `http://127.0.0.1:8765` in your browser.
 
-Open `http://127.0.0.1:8765`.
-
-Or manually:
-
+### Option 2: Manual Setup
 ```powershell
+# Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run server
 python -m app.main
 ```
 
-## Collector status
+---
 
-| Product | Current live collector | Important limitation |
-|---|---|---|
-| Cloud Code / Cloud Shell | Not yet machine-readable in this app | Official weekly quota is currently UI-visible; do not substitute Gemini/Cloud project data |
-| Google Cloud project quotas | Planned | Project/service quotas are separate from Cloud Code |
-| Codex | Planned | Use supported OpenAI/Codex usage surfaces; do not scrape private sessions |
-| Gemini API | Planned | Limits are project/model dependent |
-| GitHub Copilot | Planned | Current plans use usage/AI-credit concepts that vary by plan |
-| VS Code | Host only | Actual quota authority comes from the installed provider extension |
-| Antigravity CLI | Live | Uses supported status-line telemetry |
-| Antigravity 2.0 | Live | Uses local quota service when available |
+## Running Tests
 
-The UI intentionally reflects this table instead of pretending all providers are live.
+AI Quota includes automated tests covering database operations, provider isolation, duplicate detection, and API endpoints:
+
+```powershell
+python -m pytest tests/ -v
+```
+
+---
+
+## Project Structure
+
+```
+AI-Quota/
+├── app/
+│   ├── main.py                   # FastAPI app, API routing, server startup
+│   ├── database.py               # SQLite session, schema init, safe migrations
+│   ├── models.py                 # Pydantic v2 data models
+│   ├── providers/                # Provider Adapter implementations
+│   │   ├── base.py               # ProviderAdapter abstract base class & ProviderTruth
+│   │   ├── cloud_code.py         # Cloud Code / Cloud Shell adapter
+│   │   ├── antigravity_2.py      # Antigravity 2.0 local language server probe
+│   │   ├── antigravity_cli.py    # Antigravity CLI statusline bridge adapter
+│   │   ├── codex.py              # OpenAI / Codex adapter
+│   │   ├── gemini.py             # Gemini API adapter
+│   │   ├── google_cloud.py       # Google Cloud project quotas adapter
+│   │   ├── copilot.py            # GitHub Copilot adapter
+│   │   └── vscode.py             # VS Code host adapter
+│   ├── services/                 # Core business services
+│   │   ├── account_service.py    # Account CRUD, normalization, duplicate check
+│   │   ├── snapshot_service.py   # Snapshot recording & window querying
+│   │   └── sync_manager.py       # Isolated fault-tolerant provider sync
+│   └── utils/
+│       ├── time.py               # ISO timestamp, countdown, and duration helpers
+│       └── logging.py            # Sanitized logger
+├── static/
+│   ├── index.html                # Semantic HTML5 dashboard layout
+│   ├── app.js                    # Unified state-driven frontend
+│   ├── dashboard.css             # Main layout & responsive styles
+│   ├── ui.css                    # Component styles (cards, recommendations)
+│   └── provider.css              # Provider badges and status chips
+├── docs/
+│   ├── architecture.md           # Master architecture documentation
+│   ├── provider-status.md        # Explicit provider operational matrix
+│   └── PROVIDER-PLAN.md          # Provider truth guidelines
+├── tests/
+│   ├── conftest.py               # Test database fixtures
+│   ├── test_database.py          # Account & snapshot SQLite tests
+│   ├── test_providers.py         # Provider isolation & truth tests
+│   └── test_api.py               # API route integration tests
+├── requirements.txt
+├── pyproject.toml
+└── run.bat
+```
