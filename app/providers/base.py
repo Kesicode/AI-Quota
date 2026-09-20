@@ -61,9 +61,15 @@ class ProviderAdapter(ABC):
         """Check whether this adapter handles the specified provider/client pair."""
         p = (provider or "").strip().lower()
         c = (client or "").strip().lower()
-        if p == self.id.lower() or p in [x.lower() for x in self.supported_clients]:
+        supported = [sc.lower() for sc in self.supported_clients]
+        # 1. Direct client match takes precedence
+        if any(c == sc or sc in c for sc in supported if c):
             return True
-        return any(c == sc.lower() or sc.lower() in c for sc in self.supported_clients)
+        # 2. If client is not specified or generic, fall back to provider identity
+        if not c or c in ("other", "provider", "default"):
+            if p == self.id.lower() or any(p == sc or sc in p for sc in supported):
+                return True
+        return False
 
     @abstractmethod
     def sync(self) -> dict[str, Any]:

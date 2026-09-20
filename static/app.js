@@ -251,7 +251,7 @@
         return healthScore(b) - healthScore(a);
       });
 
-    const best = candidates[0] || null;
+    const best = candidates.find((a) => effectiveStatus(a) !== 'exhausted' && healthScore(a) > 0) || null;
 
     // Renewals: accounts with a future reset timestamp
     const now = Date.now();
@@ -282,7 +282,7 @@
           </div>
           <div class="recommend-metric">
             <strong>${score < 0 ? 'Unknown' : `${score.toFixed(score % 1 ? 1 : 0)}%`}</strong>
-            <small>${crit ? `${esc(crit.window_name)} · renews ${reset.countdown}` : 'no reset data'}</small>
+            <small>${crit ? `${esc(crit.window_name)} · renews <span data-reset="${esc(crit.reset_at || '')}">${reset.countdown}</span>` : 'no reset data'}</small>
           </div>
         </div>`;
     }).join('') || '<div class="summary-empty">Connect a provider to view data-driven recommendations.</div>';
@@ -312,7 +312,7 @@
         <div class="smart-label">NEXT FASTEST RENEWAL</div>
         <div class="smart-title">${esc(next ? (next.account.display_name || next.account.email) : 'No reset data')}</div>
         <div class="smart-sub">
-          ${next ? `${esc(next.account.client || next.account.provider)} · ${formatDuration((next.resetTime - now) / 1000)}` : 'A provider must report a reset timestamp first.'}
+          ${next ? `${esc(next.account.client || next.account.provider)} · <span data-reset="${esc(next.window.reset_at || '')}">${formatDuration((next.resetTime - now) / 1000)}</span>` : 'A provider must report a reset timestamp first.'}
         </div>
         <div class="smart-reason">
           ${next ? `Window: ${esc(next.window.window_name || 'Quota')}` : 'No authoritative reset timestamp is available.'}
@@ -521,6 +521,8 @@
     }).join('');
   }
 
+  const expiredResets = new Set();
+
   function updateCountdowns() {
     const clock = $('#localClock');
     if (clock) clock.textContent = new Date().toLocaleTimeString();
@@ -528,7 +530,12 @@
     $$('[data-reset]').forEach((el) => {
       const raw = el.dataset.reset;
       if (raw) {
-        el.textContent = resetInfo(raw).countdown;
+        const info = resetInfo(raw);
+        el.textContent = info.countdown;
+        if (info.countdown === 'Ready' && !expiredResets.has(raw)) {
+          expiredResets.add(raw);
+          load(true);
+        }
       }
     });
   }

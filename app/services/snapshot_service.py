@@ -20,6 +20,9 @@ def record_snapshot(
     captured_at: str | None = None,
 ) -> int | None:
     timestamp = captured_at or now_iso()
+    client_val = str(client or "")
+    model_val = str(model or "")
+    window_val = str(window_name or "")
     with db_session() as conn:
         # Check if identical snapshot already exists
         exists = conn.execute(
@@ -27,7 +30,7 @@ def record_snapshot(
             SELECT id FROM quota_snapshots
             WHERE account_id=? AND client=? AND model=? AND window_name=? AND captured_at=?
             """,
-            (account_id, client, model, window_name, timestamp),
+            (account_id, client_val, model_val, window_val, timestamp),
         ).fetchone()
         if exists:
             return exists["id"]
@@ -43,9 +46,9 @@ def record_snapshot(
             (
                 account_id,
                 service,
-                client,
-                model,
-                window_name,
+                client_val,
+                model_val,
+                window_val,
                 remaining_percent,
                 used_units,
                 limit_units,

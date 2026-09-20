@@ -22,9 +22,16 @@ def normalize_str(s: str | None) -> str:
     return (s or "").strip().lower()
 
 
-def is_ignored(email: str, provider: str, client: str) -> bool:
-    with db_session() as conn:
+def is_ignored(email: str, provider: str, client: str, conn: Any = None) -> bool:
+    if conn is not None:
         row = conn.execute(
+            "SELECT 1 FROM ignored_accounts WHERE lower(email)=? AND lower(provider)=? AND lower(client)=?",
+            (normalize_str(email), normalize_str(provider), normalize_str(client)),
+        ).fetchone()
+        return row is not None
+
+    with db_session() as session_conn:
+        row = session_conn.execute(
             "SELECT 1 FROM ignored_accounts WHERE lower(email)=? AND lower(provider)=? AND lower(client)=?",
             (normalize_str(email), normalize_str(provider), normalize_str(client)),
         ).fetchone()
@@ -117,7 +124,7 @@ def ensure_auto_discovered_account(
 
     with db_session() as conn:
         # Check if intentionally ignored/deleted
-        if is_ignored(norm_email, norm_provider, norm_client):
+        if is_ignored(norm_email, norm_provider, norm_client, conn=conn):
             return None
 
         row = conn.execute(

@@ -174,13 +174,19 @@ def get_dashboard(sync: bool = Query(default=False)) -> dict[str, Any]:
         reverse=True,
     )
 
+    best_id = (
+        ranked[0]["id"]
+        if (ranked and float(ranked[0].get("best_remaining") or 0) > 0 and ranked[0].get("status") != "exhausted")
+        else None
+    )
+
     summary = {
         "accounts": len(accounts),
         "live": sum(1 for c in accounts if c.get("status") == "live"),
         "stale": sum(1 for c in accounts if c.get("status") == "stale"),
         "not_connected": sum(1 for c in accounts if c.get("status") == "not_connected"),
         "exhausted": sum(1 for c in accounts if c.get("status") == "exhausted"),
-        "best_account_id": ranked[0]["id"] if ranked else None,
+        "best_account_id": best_id,
     }
 
     return {
