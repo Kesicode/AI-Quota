@@ -1,7 +1,7 @@
 :root {
   --bg: #090a0d;
-  --surface: #0f1115;
-  --surface-subtle: #0b0d10;
+  --surface: rgba(15, 17, 21, 0.85);
+  --surface-subtle: rgba(11, 13, 16, 0.8);
   --surface-active: #14171d;
   --border: rgba(255, 255, 255, 0.07);
   --border-focus: rgba(255, 255, 255, 0.18);
@@ -33,9 +33,154 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Ambient Flowing Glow Canvas */
+.ambient-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  contain: strict;
+}
+
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.orb-1 {
+  width: min(650px, 75vw);
+  height: min(650px, 75vw);
+  top: -5%;
+  left: -5%;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.18) 0%, rgba(20, 83, 45, 0.10) 45%, transparent 70%);
+  filter: blur(90px);
+  animation: flow-random-1 31s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+}
+
+.orb-2 {
+  width: min(550px, 65vw);
+  height: min(550px, 65vw);
+  top: 30%;
+  right: -5%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.16) 0%, rgba(5, 150, 105, 0.08) 50%, transparent 70%);
+  filter: blur(100px);
+  animation: flow-random-2 39s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+}
+
+.orb-3 {
+  width: min(500px, 60vw);
+  height: min(500px, 60vw);
+  bottom: -5%;
+  left: 20%;
+  background: radial-gradient(circle, rgba(74, 222, 128, 0.14) 0%, rgba(22, 101, 52, 0.07) 45%, transparent 70%);
+  filter: blur(85px);
+  animation: flow-random-3 43s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+}
+
+.orb-4 {
+  width: min(420px, 50vw);
+  height: min(420px, 50vw);
+  top: 55%;
+  left: 45%;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.13) 0%, rgba(6, 78, 59, 0.06) 50%, transparent 70%);
+  filter: blur(80px);
+  animation: flow-random-4 27s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+}
+
+@keyframes flow-random-1 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  20% {
+    transform: translate3d(30vw, 20vh, 0) scale(1.15) rotate(45deg);
+  }
+  40% {
+    transform: translate3d(10vw, 55vh, 0) scale(0.9) rotate(110deg);
+  }
+  65% {
+    transform: translate3d(45vw, 40vh, 0) scale(1.2) rotate(190deg);
+  }
+  85% {
+    transform: translate3d(20vw, 10vh, 0) scale(0.95) rotate(260deg);
+  }
+  100% {
+    transform: translate3d(40vw, 65vh, 0) scale(1.08) rotate(340deg);
+  }
+}
+
+@keyframes flow-random-2 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  25% {
+    transform: translate3d(-30vw, 25vh, 0) scale(0.85) rotate(-55deg);
+  }
+  50% {
+    transform: translate3d(-55vw, -15vh, 0) scale(1.2) rotate(-130deg);
+  }
+  75% {
+    transform: translate3d(-15vw, 40vh, 0) scale(0.92) rotate(-210deg);
+  }
+  100% {
+    transform: translate3d(-40vw, -25vh, 0) scale(1.12) rotate(-290deg);
+  }
+}
+
+@keyframes flow-random-3 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  22% {
+    transform: translate3d(35vw, -30vh, 0) scale(1.18) rotate(50deg);
+  }
+  48% {
+    transform: translate3d(-12vw, -45vh, 0) scale(0.88) rotate(120deg);
+  }
+  72% {
+    transform: translate3d(25vw, -15vh, 0) scale(1.12) rotate(210deg);
+  }
+  100% {
+    transform: translate3d(-20vw, -35vh, 0) scale(0.96) rotate(300deg);
+  }
+}
+
+@keyframes flow-random-4 {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.92) rotate(0deg);
+  }
+  28% {
+    transform: translate3d(-25vw, 30vh, 0) scale(1.2) rotate(-40deg);
+  }
+  58% {
+    transform: translate3d(30vw, -20vh, 0) scale(0.82) rotate(-130deg);
+  }
+  82% {
+    transform: translate3d(-10vw, -12vh, 0) scale(1.08) rotate(-210deg);
+  }
+  100% {
+    transform: translate3d(18vw, 35vh, 0) scale(1) rotate(-310deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-orb {
+    animation: none !important;
+  }
 }
 
 .shell {
+  position: relative;
+  z-index: 1;
   width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
   padding: 40px 0 80px;
@@ -168,6 +313,8 @@ p {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   overflow: hidden;
 }
 
@@ -260,6 +407,8 @@ p {
 .account-card {
   border: 1px solid var(--border);
   background: var(--surface-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-radius: var(--radius);
   padding: 18px;
   display: flex;
