@@ -57,53 +57,6 @@
       </div>
       <div id="accounts" class="accounts"></div>
     </section>
-
-    <section class="panel provider-priority-panel">
-      <div class="panel-head">
-        <div>
-          <h2>Provider priority</h2>
-          <p>The products below stay separate so a Gemini value can never be mistaken for a Cloud Code value.</p>
-        </div>
-      </div>
-      <div class="provider-grid">
-        <article class="provider-card provider-card-primary">
-          <div class="provider-head"><span class="provider-mark">CC</span><div><strong>Cloud Code / Cloud Shell</strong><small>Primary priority</small></div></div>
-          <p>Cloud Code has a default weekly quota of 50 hours. The official UI shows hours remaining, total hours and the weekly reset date/time.</p>
-          <div class="provider-truth"><span class="truth-dot truth-ui"></span><strong>Official UI-derived</strong><small>Show Cloud Code hours and reset only; never use Gemini values as a substitute.</small></div>
-        </article>
-        <article class="provider-card">
-          <div class="provider-head"><span class="provider-mark">CX</span><div><strong>Google Cloud project quotas</strong><small>Separate data class</small></div></div>
-          <p>Service/project quotas are a different authority and must stay tied to the project and service that own them.</p>
-          <div class="provider-truth"><span class="truth-dot truth-api"></span><strong>API / CLI-derived</strong><small>Never display these as Cloud Code weekly hours.</small></div>
-        </article>
-        <article class="provider-card">
-          <div class="provider-head"><span class="provider-mark">CD</span><div><strong>OpenAI / Codex</strong><small>Separate from API usage</small></div></div>
-          <p>Codex has its own plan-dependent usage windows, reset behavior and credits. OpenAI API limits are separate.</p>
-          <div class="provider-truth"><span class="truth-dot truth-provider"></span><strong>Provider surface</strong><small>Use supported OpenAI/Codex usage sources only.</small></div>
-        </article>
-        <article class="provider-card">
-          <div class="provider-head"><span class="provider-mark">GM</span><div><strong>Gemini / Gemini API</strong><small>Not Cloud Code</small></div></div>
-          <p>Gemini API limits are project/model dependent. They must never be used as a proxy for Cloud Code or Codex.</p>
-          <div class="provider-truth"><span class="truth-dot truth-api"></span><strong>Project/API-derived</strong><small>RPM, TPM, RPD and model-specific limits where exposed.</small></div>
-        </article>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Provider / client coverage</h2>
-          <p>A provider is only marked live when AI Quota has a real source for the exact product being displayed.</p>
-        </div>
-      </div>
-      <div class="info-grid provider-info-grid">
-        <div><strong>Cloud Code / Cloud Shell</strong><span>Priority source. Weekly usage is measured in hours, with hours remaining, total hours and a weekly reset timestamp.</span></div>
-        <div><strong>Antigravity CLI + 2.0</strong><span>Live collectors exist for supported Antigravity local surfaces. Account matching uses provider-reported identity.</span></div>
-        <div><strong>Google Cloud quotas</strong><span>Project/service quotas are separate from Cloud Code and Gemini subscription quotas.</span></div>
-        <div><strong>Codex / Gemini / Copilot / VS Code</strong><span>Tracked as separate products. Unsupported live collection stays unavailable instead of being guessed.</span></div>
-      </div>
-    </section>
-
     <section class="security">
       <strong>Local-only security boundary</strong>
       <span>AI Quota binds to 127.0.0.1. Never enter passwords, browser cookies, session tokens or API keys into this dashboard.</span>
