@@ -1,1 +1,41 @@
-.priority-grid{grid-template-columns:1.6fr 1.1fr .8fr .8fr}.priority-card{min-height:150px}.cloud-code-priority{border-color:#365a33;background:linear-gradient(145deg,rgba(30,63,28,.55),rgba(14,16,19,.94))}.provider-priority-panel{overflow:hidden}.provider-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px}.provider-card{border:1px solid #252b31;background:#101216;border-radius:13px;padding:15px;min-width:0}.provider-card-primary{border-color:#355d34;box-shadow:inset 0 1px 0 rgba(133,210,117,.07)}.provider-head{display:flex;gap:10px;align-items:center}.provider-head strong{display:block}.provider-head small{display:block;color:#767e87;margin-top:3px}.provider-mark{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;border:1px solid #303740;background:#0d1014;font-size:11px;font-weight:900}.provider-card p{font-size:12px;color:#858d96;line-height:1.5;margin:12px 0}.provider-truth{display:grid;grid-template-columns:auto auto;gap:4px 7px;align-items:center;padding-top:10px;border-top:1px solid #232830}.provider-truth strong{font-size:11px}.provider-truth small{grid-column:2;color:#727a83;font-size:10px;line-height:1.35}.truth-dot{width:7px;height:7px;border-radius:50%;display:block}.truth-ui{background:#dbb14f}.truth-api{background:#6d9ce0}.truth-provider{background:#75c46a}.provider-info-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.priority-chip,.truth-chip{display:inline-flex;align-items:center;border-radius:999px;padding:4px 7px;font-size:9px;line-height:1;border:1px solid #30363e;white-space:nowrap}.priority-chip{border-color:#6a5621;color:#e6c75f;background:#201b0e}.truth-chip{color:#8e969e}.provider-note{margin:0 0 12px;padding:8px 10px;border:1px solid #262c33;border-radius:9px;background:#0c0f13;color:#727b84;font-size:10px;line-height:1.4}.disabled-button{opacity:.55;cursor:not-allowed!important}.disabled-button:hover{background:#111419!important}.hero-card #cloudCodeHero,.hero-card #codexHero{font-size:20px;font-weight:800;margin:9px 0 5px;letter-spacing:-.02em}@media(max-width:1200px){.priority-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.provider-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.provider-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.priority-grid{grid-template-columns:1fr}.provider-grid,.provider-info-grid{grid-template-columns:1fr}}
+.priority-chip,
+.truth-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: 9px;
+  line-height: 1;
+  border: 1px solid #30363e;
+  white-space: nowrap;
+}
+
+.priority-chip {
+  border-color: #6a5621;
+  color: #e6c75f;
+  background: #201b0e;
+}
+
+.truth-chip {
+  color: #8e969e;
+}
+
+.provider-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid #262c33;
+  border-radius: 9px;
+  background: #0c0f13;
+  color: #727b84;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.disabled-button {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+.disabled-button:hover {
+  background: #111419 !important;
+}
