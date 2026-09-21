@@ -87,6 +87,11 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(STATIC_DIR / "favicon.ico", media_type="image/x-icon")
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "app": "AI Quota", "time": now_iso()}

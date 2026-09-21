@@ -88,6 +88,12 @@ class ApiTestCase(unittest.TestCase):
         self.assertIn("ok", data)
         self.assertIn("providers", data)
 
+    def test_favicon_endpoint(self) -> None:
+        res = self.client.get("/favicon.ico")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers["content-type"], "image/x-icon")
+        self.assertGreater(len(res.content), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
