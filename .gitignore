@@ -13,3 +13,8 @@ data/antigravity-previous-statusline.json
 *.log
 .DS_Store
 .vscode/
+
+node_modules/
+apps/vscode-extension/dist/
+apps/vscode-extension/out/
+*.vsix

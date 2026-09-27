@@ -1,3 +1,9 @@
+"""
+AI-Quota — Database module (backward-compatible wrapper).
+
+All existing code that imports from app.database continues to work.
+On startup, we now run the full v2 migration from packages.database.migrations.
+"""
 from __future__ import annotations
 
 import sqlite3
@@ -28,8 +34,8 @@ def get_connection(path: Path | str | None = None) -> sqlite3.Connection:
         target.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(target)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
@@ -47,15 +53,47 @@ def db_session(path: Path | str | None = None) -> Generator[sqlite3.Connection, 
 
 
 def add_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    """Idempotent column addition."""
     columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
     if column not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def init_db(path: Path | str | None = None) -> None:
+    """
+    Initialise the database.
+    Calls the v2 migration engine from packages.database.migrations,
+    which handles schema creation, column additions, account_id backfill,
+    and default settings — all idempotently.
+    """
+    target = Path(path) if path else _DB_PATH
+
+    # Sync the shared connection module's path
+    try:
+        from packages.database import connection as _conn_mod
+        _conn_mod._DB_PATH = target
+    except ImportError:
+        pass
+
+    # Run v2 migration (with auto-backup on first run)
+    try:
+        from packages.database.migrations import init_db as _v2_init
+        result = _v2_init(target, backup=True)
+        import logging
+        logging.getLogger("ai_quota.database").info(
+            "Database initialised: backfilled=%d, backup=%s",
+            result.get("backfilled_account_ids", 0),
+            result.get("backup_path", "none"),
+        )
+    except ImportError:
+        # packages/ not on path yet — fall back to legacy init
+        _legacy_init(path)
+
+
+def _legacy_init(path: Path | str | None = None) -> None:
+    """Legacy migration path — used only if packages/ is unavailable."""
     with db_session(path) as conn:
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL,
@@ -102,15 +140,16 @@ def init_db(path: Path | str | None = None) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_accounts_lookup
                 ON accounts(email, provider, client);
-            """
-        )
-        # Ensure migration columns for legacy databases
-        add_column(conn, "accounts", "client", "TEXT NOT NULL DEFAULT 'Antigravity CLI'")
-        add_column(conn, "accounts", "status", "TEXT NOT NULL DEFAULT 'not_connected'")
-        add_column(conn, "accounts", "plan_tier", "TEXT")
-        add_column(conn, "accounts", "last_seen_at", "TEXT")
-        add_column(conn, "accounts", "last_error", "TEXT")
-        add_column(conn, "accounts", "credits_remaining", "REAL")
-        add_column(conn, "accounts", "credits_updated_at", "TEXT")
-        add_column(conn, "accounts", "source_kind", "TEXT NOT NULL DEFAULT 'manual'")
-        add_column(conn, "quota_snapshots", "client", "TEXT NOT NULL DEFAULT ''")
+        """)
+        for table, col, defn in [
+            ("accounts", "client", "TEXT NOT NULL DEFAULT 'Antigravity CLI'"),
+            ("accounts", "status", "TEXT NOT NULL DEFAULT 'not_connected'"),
+            ("accounts", "plan_tier", "TEXT"),
+            ("accounts", "last_seen_at", "TEXT"),
+            ("accounts", "last_error", "TEXT"),
+            ("accounts", "credits_remaining", "REAL"),
+            ("accounts", "credits_updated_at", "TEXT"),
+            ("accounts", "source_kind", "TEXT NOT NULL DEFAULT 'manual'"),
+            ("quota_snapshots", "client", "TEXT NOT NULL DEFAULT ''"),
+        ]:
+            add_column(conn, table, col, defn)

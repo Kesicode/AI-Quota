@@ -1,0 +1,200 @@
+{
+  "name": "ai-quota",
+  "displayName": "AI-Quota",
+  "description": "Universal AI Account & Quota Manager — monitor quotas, manage accounts, and switch between AI providers directly from your IDE.",
+  "version": "2.0.0",
+  "publisher": "Kesicode",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kesicode/AI-Quota.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Snippets"
+  ],
+  "keywords": [
+    "ai",
+    "quota",
+    "antigravity",
+    "account",
+    "switcher",
+    "gemini",
+    "copilot",
+    "codex"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-quota-sidebar",
+          "title": "AI-Quota",
+          "icon": "media/quota-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ai-quota-sidebar": [
+        {
+          "type": "webview",
+          "id": "ai-quota.quotaView",
+          "name": "Quota",
+          "icon": "media/quota-icon.svg"
+        },
+        {
+          "id": "ai-quota.accountsView",
+          "name": "Accounts",
+          "icon": "media/accounts-icon.svg"
+        },
+        {
+          "id": "ai-quota.providersView",
+          "name": "Providers",
+          "icon": "media/providers-icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ai-quota.openDashboard",
+        "title": "AI-Quota: Open Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "ai-quota.switchAccount",
+        "title": "AI-Quota: Switch Account",
+        "icon": "$(account)"
+      },
+      {
+        "command": "ai-quota.saveCurrentAccount",
+        "title": "AI-Quota: Save Current Account"
+      },
+      {
+        "command": "ai-quota.refresh",
+        "title": "AI-Quota: Refresh Quota",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ai-quota.showStatus",
+        "title": "AI-Quota: Show Status"
+      },
+      {
+        "command": "ai-quota.showDiagnostics",
+        "title": "AI-Quota: Diagnostics"
+      },
+      {
+        "command": "ai-quota.signIn",
+        "title": "AI-Quota: Sign In"
+      },
+      {
+        "command": "ai-quota.signOut",
+        "title": "AI-Quota: Sign Out"
+      },
+      {
+        "command": "ai-quota.reAuth",
+        "title": "AI-Quota: Re-authenticate"
+      },
+      {
+        "command": "ai-quota.showQuotaMatrix",
+        "title": "AI-Quota: Quota Matrix (All Accounts)"
+      },
+      {
+        "command": "ai-quota.addAccount",
+        "title": "AI-Quota: Add Account"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "ai-quota.openDashboard"
+        },
+        {
+          "command": "ai-quota.switchAccount"
+        },
+        {
+          "command": "ai-quota.saveCurrentAccount"
+        },
+        {
+          "command": "ai-quota.refresh"
+        },
+        {
+          "command": "ai-quota.showStatus"
+        },
+        {
+          "command": "ai-quota.showDiagnostics"
+        },
+        {
+          "command": "ai-quota.signIn"
+        },
+        {
+          "command": "ai-quota.signOut"
+        },
+        {
+          "command": "ai-quota.reAuth"
+        },
+        {
+          "command": "ai-quota.showQuotaMatrix"
+        },
+        {
+          "command": "ai-quota.addAccount"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AI-Quota",
+      "properties": {
+        "ai-quota.agentUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "URL of the AI-Quota local agent."
+        },
+        "ai-quota.pollInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "maximum": 600,
+          "description": "Quota refresh interval in seconds."
+        },
+        "ai-quota.notificationThreshold": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Show low-quota notification when remaining % drops below this value."
+        },
+        "ai-quota.autoSwitch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically switch to the best available account when quota is low. OFF by default."
+        },
+        "ai-quota.statusBarFormat": {
+          "type": "string",
+          "default": "$(pulse) AI-Quota {percent}% · {reset}",
+          "description": "Status bar format string. Supports {percent}, {reset}, {account}, {provider}."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "dev": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/vscode": "1.85",
+    "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.21.5",
+    "eslint": "^8.57.0",
+    "typescript": "5.4"
+  }
+}

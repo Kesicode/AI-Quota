@@ -28,8 +28,21 @@ STATIC_DIR = ROOT / "static"
 
 logger = get_logger("ai_quota.main")
 
-app = FastAPI(title="AI Quota", docs_url="/api/docs", redoc_url=None)
+app = FastAPI(
+    title="AI-Quota",
+    version="2.0.0",
+    description="Universal AI Account & Quota Manager",
+    docs_url="/api/docs",
+    redoc_url=None,
+)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# ── v1 API router (new routes) ─────────────────────────────────────────────
+try:
+    from .routes.v1 import router as v1_router
+    app.include_router(v1_router, prefix="/api/v1")
+except ImportError:
+    pass  # v1 routes being built — non-fatal during migration
 
 
 @app.on_event("startup")
