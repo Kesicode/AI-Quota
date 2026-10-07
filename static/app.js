@@ -825,18 +825,226 @@
     wireModalBackdrops();
   }
 
+  // ── Tab navigation ────────────────────────────────────────────────────────
+  function initTabs() {
+    const btns = $$('.tab-btn');
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        btns.forEach(b => { b.classList.toggle('active', b === btn); b.setAttribute('aria-selected', String(b === btn)); });
+        $$('.tab-panel').forEach(p => { p.classList.toggle('active', p.id === `tab-${tab}`); p.hidden = p.id !== `tab-${tab}`; });
+        if (tab === 'providers') loadProviders();
+        if (tab === 'history') loadHistory();
+        if (tab === 'settings') loadSettings();
+        if (tab === 'diagnostics') loadDiagnostics();
+      });
+    });
+  }
+
+  // ── Providers tab ─────────────────────────────────────────────────────────
+  async function loadProviders() {
+    const el = $('#providers-list');
+    if (!el) return;
+    el.innerHTML = '<div class="loading-row">Loading…</div>';
+    try {
+      const res = await fetch('/api/v1/providers');
+      if (!res.ok) throw new Error(res.statusText);
+      const providers = await res.json();
+      if (!providers.length) { el.innerHTML = '<div class="loading-row">No providers registered.</div>'; return; }
+      el.innerHTML = providers.map(p => {
+        const det = p.detected
+          ? `<span class="badge badge-live">● detected</span>`
+          : `<span class="badge badge-muted">○ not running</span>`;
+        const caps = p.capabilities || {};
+        const capList = [
+          caps.quota && '<span class="cap-tag">quota</span>',
+          caps.detection && '<span class="cap-tag">detection</span>',
+          caps.switching && `<span class="cap-tag">switching (${esc(caps.switch_method || '?')})</span>`,
+          caps.instant_switch && '<span class="cap-tag cap-instant">instant</span>',
+        ].filter(Boolean).join(' ');
+        return `<div class="provider-row">
+          <div class="provider-row-head">
+            <strong>${esc(p.display_name)}</strong>${det}
+            <code class="provider-id">${esc(p.id)}</code>
+          </div>
+          ${p.hub_url ? `<div class="provider-hub">Hub: <code>${esc(p.hub_url)}</code></div>` : ''}
+          <div class="provider-caps">${capList || '<span class="cap-tag cap-none">read-only</span>'}</div>
+          <div class="provider-truth">Authority: <em>${esc(p.truth?.authority_type || 'unknown')}</em> — ${esc(p.truth?.note || '')}</div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      el.innerHTML = `<div class="loading-row error-row">Failed to load providers: ${esc(String(e))}</div>`;
+    }
+  }
+  $('#refreshProviders')?.addEventListener('click', loadProviders);
+
+  // ── History tab ───────────────────────────────────────────────────────────
+  async function populateHistoryAccountSelect() {
+    const sel = $('#historyAccount');
+    if (!sel || sel.options.length > 1) return;
+    try {
+      const res = await fetch('/api/accounts');
+      const accs = await res.json();
+      accs.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = a.display_name || a.email;
+        sel.appendChild(opt);
+      });
+    } catch { /* silent */ }
+  }
+
+  async function loadHistory() {
+    await populateHistoryAccountSelect();
+    const accountId = $('#historyAccount')?.value || 'all';
+    const period = $('#historyPeriod')?.value || '24h';
+    const tableEl = $('#history-table');
+    const canvas = $('#historyCanvas');
+    if (!tableEl || !canvas) return;
+    tableEl.innerHTML = '<div class="loading-row">Loading…</div>';
+    try {
+      const url = accountId === 'all'
+        ? `/api/v1/history?period=${period}`
+        : `/api/v1/history/${accountId}?period=${period}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.statusText);
+      const data = await res.json();
+      // Normalise to flat points array
+      const points = Array.isArray(data) ? data.flatMap(d => d.points || []) : (data.points || []);
+      drawHistoryChart(canvas, points);
+      if (!points.length) { tableEl.innerHTML = '<div class="loading-row">No history recorded yet. Data accumulates as the agent polls.</div>'; return; }
+      tableEl.innerHTML = `<table class="history-tbl">
+        <thead><tr><th>Time</th><th>Window</th><th>Remaining %</th><th>Source</th><th>Freshness</th></tr></thead>
+        <tbody>${points.slice(-50).reverse().map(p => `<tr>
+          <td>${esc(new Date(p.captured_at||p.timestamp||'').toLocaleString())}</td>
+          <td>${esc(p.window_name||'—')}</td>
+          <td>${p.remaining_percent != null ? `${Number(p.remaining_percent).toFixed(1)}%` : '—'}</td>
+          <td>${esc(p.source||'—')}</td>
+          <td><span class="staleness-tag ${esc((p.staleness_tier||'UNKNOWN').toLowerCase())}">${esc(p.staleness_tier||'—')}</span></td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } catch (e) {
+      tableEl.innerHTML = `<div class="loading-row error-row">${esc(String(e))}</div>`;
+    }
+  }
+
+  function drawHistoryChart(canvas, points) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!points.length) { ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0,0,W,H); return; }
+    // Filter numeric points
+    const pts = points.filter(p => p.remaining_percent != null).map(p => ({
+      t: new Date(p.captured_at || p.timestamp || '').getTime(),
+      v: Number(p.remaining_percent),
+    })).sort((a,b) => a.t - b.t);
+    if (pts.length < 2) return;
+    const minT = pts[0].t, maxT = pts[pts.length-1].t, rangeT = maxT - minT || 1;
+    const pad = { l: 40, r: 16, t: 16, b: 32 };
+    const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    [0,25,50,75,100].forEach(v => {
+      const y = pad.t + iH - (v/100)*iH;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+iW, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '10px system-ui';
+      ctx.fillText(`${v}%`, 2, y+4);
+    });
+    // Line
+    ctx.strokeStyle = '#1a9e5c'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = pad.l + ((p.t - minT) / rangeT) * iW;
+      const y = pad.t + iH - (p.v / 100) * iH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // Fill under line
+    ctx.fillStyle = 'rgba(26,158,92,0.08)';
+    ctx.lineTo(pad.l + iW, pad.t + iH); ctx.lineTo(pad.l, pad.t + iH); ctx.closePath(); ctx.fill();
+  }
+
+  $('#historyAccount')?.addEventListener('change', loadHistory);
+  $('#historyPeriod')?.addEventListener('change', loadHistory);
+
+  // ── Settings tab ──────────────────────────────────────────────────────────
+  async function loadSettings() {
+    const form = $('#settingsForm');
+    if (!form) return;
+    try {
+      const res = await fetch('/api/v1/settings');
+      if (!res.ok) return;
+      const settings = await res.json();
+      Object.entries(settings).forEach(([k, v]) => {
+        const el = form.querySelector(`[name="${k}"]`);
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = v === 'true';
+        else el.value = v;
+      });
+    } catch { /* silent */ }
+  }
+
+  $('#settingsForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = $('#settingsStatus');
+    const data = {};
+    new FormData(form).forEach((v, k) => { data[k] = String(v); });
+    // checkboxes that are unchecked don't appear in FormData
+    form.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      if (!data[cb.name]) data[cb.name] = 'false';
+    });
+    try {
+      const res = await fetch('/api/v1/settings', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      const result = await res.json();
+      if (status) { status.textContent = `Saved: ${result.updated?.join(', ') || 'none'}`; status.className = 'settings-status ok'; }
+    } catch (err) {
+      if (status) { status.textContent = `Error: ${err}`; status.className = 'settings-status error'; }
+    }
+  });
+
+  // ── Diagnostics tab ───────────────────────────────────────────────────────
+  async function loadDiagnostics() {
+    const el = $('#diagnostics-body');
+    if (!el) return;
+    el.innerHTML = '<div class="loading-row">Loading…</div>';
+    try {
+      const res = await fetch('/api/v1/diagnostics');
+      if (!res.ok) throw new Error(res.statusText);
+      const d = await res.json();
+      const provRows = (d.providers||[]).map(p => `<tr>
+        <td>${esc(p.display_name||p.id)}</td>
+        <td><span class="badge ${p.status==='ok'?'badge-live':'badge-muted'}">${esc(p.status)}</span></td>
+        <td>${p.latency_ms != null ? `${Number(p.latency_ms).toFixed(0)}ms` : '—'}</td>
+        <td>${esc(p.error||'—')}</td>
+      </tr>`).join('');
+      const settingRows = Object.entries(d.settings||{}).map(([k,v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
+      el.innerHTML = `
+        <div class="diag-meta">
+          <span>Agent version: <strong>${esc(d.agent_version)}</strong></span>
+          <span>DB size: <strong>${Number(d.db_size_bytes/1024).toFixed(1)} KB</strong></span>
+          <span>Generated: <strong>${esc(new Date(d.generated_at).toLocaleString())}</strong></span>
+        </div>
+        <h3>Providers</h3>
+        <table class="history-tbl"><thead><tr><th>Provider</th><th>Status</th><th>Latency</th><th>Error</th></tr></thead><tbody>${provRows||'<tr><td colspan=4>No providers</td></tr>'}</tbody></table>
+        <h3>Settings</h3>
+        <table class="history-tbl"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>${settingRows||'<tr><td colspan=2>No settings</td></tr>'}</tbody></table>
+      `;
+    } catch (e) {
+      el.innerHTML = `<div class="loading-row error-row">${esc(String(e))}</div>`;
+    }
+  }
+  $('#refreshDiagnostics')?.addEventListener('click', loadDiagnostics);
+
   // Startup
   document.addEventListener('DOMContentLoaded', () => {
+    initTabs();
     initEventListeners();
     load(false);
 
-    // 1-second countdown interval (updates DOM in place)
     setInterval(updateCountdowns, 1000);
-
-    // 5-second background refresh (fetches cached dashboard state without triggering sync)
     setInterval(() => load(true), 5000);
 
-    // Re-check when window regains focus
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) load(true);
     });

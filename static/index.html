@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>AI Quota</title>
+  <title>AI-Quota</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="alternate icon" href="/static/favicon.ico">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -19,70 +19,188 @@
     <div class="ambient-orb orb-3"></div>
     <div class="ambient-orb orb-4"></div>
   </div>
+
   <main class="shell">
     <header class="topbar">
       <div>
         <div class="eyebrow">LOCAL AI CONTROL CENTER</div>
-        <h1>AI Quota</h1>
-        <p>One registry for Cloud Code, Codex, Antigravity, Gemini, Copilot and Google Cloud — with each source kept separate and labelled by authority.</p>
+        <h1>AI-Quota</h1>
+        <p>Universal AI account &amp; quota manager — each source kept separate and labelled by authority.</p>
       </div>
       <div class="top-actions">
         <div class="live-clock"><span class="live-dot"></span><span id="localClock">—</span></div>
-        <button id="enableAntigravity" class="button primary">Enable Antigravity CLI collector</button>
         <button id="sync" class="button">Sync now</button>
         <button id="addAccount" class="button">+ Add account</button>
       </div>
     </header>
 
-    <section id="smart-summary" class="smart-summary" aria-label="Account availability and recommendations"></section>
+    <!-- Tab nav -->
+    <nav class="tab-nav" role="tablist" aria-label="Dashboard sections">
+      <button class="tab-btn active" data-tab="accounts" role="tab" aria-selected="true">Accounts</button>
+      <button class="tab-btn" data-tab="providers" role="tab" aria-selected="false">Providers</button>
+      <button class="tab-btn" data-tab="history" role="tab" aria-selected="false">History</button>
+      <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+      <button class="tab-btn" data-tab="diagnostics" role="tab" aria-selected="false">Diagnostics</button>
+    </nav>
 
-    <section class="panel account-panel">
-      <div class="panel-head account-toolbar">
-        <div>
-          <h2>Accounts</h2>
-          <p>Register the email/project identity you want to track. Passwords, cookies and API keys are never stored here.</p>
+    <!-- ── Accounts tab ── -->
+    <div id="tab-accounts" class="tab-panel active" role="tabpanel">
+      <section id="smart-summary" class="smart-summary" aria-label="Account availability and recommendations"></section>
+
+      <section class="panel account-panel">
+        <div class="panel-head account-toolbar">
+          <div>
+            <h2>Accounts</h2>
+            <p>Register the email/project identity you want to track. Passwords, cookies and API keys are never stored here.</p>
+          </div>
+          <div class="toolbar-controls">
+            <input id="accountSearch" class="toolbar-input" type="search" placeholder="Search email, project, name, client…" aria-label="Search accounts">
+            <select id="statusFilter" class="toolbar-select" aria-label="Filter account status">
+              <option value="all">All statuses</option>
+              <option value="live">Live</option>
+              <option value="stale">Stale</option>
+              <option value="not_connected">Not connected</option>
+              <option value="exhausted">Exhausted</option>
+            </select>
+            <select id="sortAccounts" class="toolbar-select" aria-label="Sort accounts">
+              <option value="best">Best available</option>
+              <option value="priority">Priority</option>
+              <option value="name">Name</option>
+              <option value="status">Status</option>
+              <option value="client">Client</option>
+            </select>
+          </div>
         </div>
-        <div class="toolbar-controls">
-          <input id="accountSearch" class="toolbar-input" type="search" placeholder="Search email, project, name, client…" aria-label="Search accounts">
-          <select id="statusFilter" class="toolbar-select" aria-label="Filter account status">
-            <option value="all">All statuses</option>
-            <option value="live">Live</option>
-            <option value="stale">Stale</option>
-            <option value="not_connected">Not connected</option>
-            <option value="exhausted">Exhausted</option>
-          </select>
-          <select id="sortAccounts" class="toolbar-select" aria-label="Sort accounts">
-            <option value="best">Best available</option>
-            <option value="priority">Priority</option>
-            <option value="name">Name</option>
-            <option value="status">Status</option>
-            <option value="client">Client</option>
-          </select>
+        <div class="account-subbar">
+          <div class="legend"><span class="dot green"></span> live <span class="dot yellow"></span> stale <span class="dot gray"></span> not connected <span class="dot red"></span> exhausted</div>
+          <div id="visibleCount" class="visible-count">0 shown</div>
         </div>
-      </div>
-      <div class="account-subbar">
-        <div class="legend"><span class="dot green"></span> live <span class="dot yellow"></span> stale <span class="dot gray"></span> not connected <span class="dot red"></span> exhausted</div>
-        <div id="visibleCount" class="visible-count">0 shown</div>
-      </div>
-      <div id="accounts" class="accounts"></div>
-    </section>
+        <div id="accounts" class="accounts"></div>
+      </section>
+    </div>
+
+    <!-- ── Providers tab ── -->
+    <div id="tab-providers" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Providers</h2>
+            <p>All registered provider adapters and their live detection status.</p>
+          </div>
+          <button id="refreshProviders" class="button">Refresh</button>
+        </div>
+        <div id="providers-list" class="providers-list">
+          <div class="loading-row">Loading providers…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── History tab ── -->
+    <div id="tab-history" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Quota History</h2>
+            <p>Time-series quota data for all tracked accounts.</p>
+          </div>
+          <div class="toolbar-controls">
+            <select id="historyAccount" class="toolbar-select" aria-label="Select account">
+              <option value="all">All accounts</option>
+            </select>
+            <select id="historyPeriod" class="toolbar-select" aria-label="Time period">
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+          </div>
+        </div>
+        <div id="history-chart" class="history-chart">
+          <canvas id="historyCanvas" width="900" height="260"></canvas>
+        </div>
+        <div id="history-table" class="history-table"></div>
+      </section>
+    </div>
+
+    <!-- ── Settings tab ── -->
+    <div id="tab-settings" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Settings</h2>
+        </div>
+        <form id="settingsForm" class="settings-form">
+          <div class="settings-group">
+            <label class="settings-label">
+              <span>Poll interval (seconds)</span>
+              <input type="number" name="poll_interval_seconds" min="5" max="600" class="settings-input">
+            </label>
+            <label class="settings-label">
+              <span>Low quota notification threshold (%)</span>
+              <input type="number" name="notification_threshold_percent" min="0" max="100" class="settings-input">
+            </label>
+            <label class="settings-label settings-toggle">
+              <span>Auto-switch (OFF by default)</span>
+              <input type="checkbox" name="auto_switch_enabled">
+            </label>
+            <label class="settings-label">
+              <span>Switch cooldown (seconds)</span>
+              <input type="number" name="switch_cooldown_seconds" min="10" max="3600" class="settings-input">
+            </label>
+            <label class="settings-label">
+              <span>Max switches per hour</span>
+              <input type="number" name="max_switches_per_hour" min="1" max="100" class="settings-input">
+            </label>
+            <label class="settings-label">
+              <span>Stale threshold (seconds)</span>
+              <input type="number" name="telemetry_stale_threshold_seconds" min="30" max="3600" class="settings-input">
+            </label>
+            <label class="settings-label">
+              <span>Very stale threshold (seconds)</span>
+              <input type="number" name="telemetry_very_stale_threshold_seconds" min="60" max="7200" class="settings-input">
+            </label>
+          </div>
+          <div id="settingsStatus" class="settings-status"></div>
+          <button type="submit" class="button primary">Save settings</button>
+        </form>
+      </section>
+    </div>
+
+    <!-- ── Diagnostics tab ── -->
+    <div id="tab-diagnostics" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Diagnostics</h2>
+            <p>Agent version, database size, per-provider health, and active settings.</p>
+          </div>
+          <button id="refreshDiagnostics" class="button">Refresh</button>
+        </div>
+        <div id="diagnostics-body" class="diagnostics-body">
+          <div class="loading-row">Loading diagnostics…</div>
+        </div>
+      </section>
+    </div>
+
     <section class="security">
       <strong>Local-only security boundary</strong>
-      <span>AI Quota binds to 127.0.0.1. Never enter passwords, browser cookies, session tokens or API keys into this dashboard.</span>
+      <span>AI-Quota binds to 127.0.0.1. Never enter passwords, browser cookies, session tokens or API keys into this dashboard.</span>
     </section>
   </main>
 
+  <!-- Add account dialog -->
   <dialog id="accountDialog">
     <form method="dialog" id="accountForm">
       <h2>Add account / project</h2>
       <label>Email / identity<input name="email" type="text" required maxlength="320" placeholder="you@example.com or project-id"></label>
       <label>Provider<select name="provider"><option>Cloud Code</option><option>Google Cloud</option><option>OpenAI / Codex</option><option>Antigravity</option><option>Gemini API</option><option>GitHub Copilot</option><option>Other</option></select></label>
-      <label>Client<select name="client"><option>Cloud Code / Cloud Shell</option><option>Google Cloud quotas</option><option>Codex</option><option>Antigravity CLI</option><option>Antigravity 2.0</option><option>Gemini API</option><option>GitHub Copilot</option><option>VS Code</option><option>Other</option></select></label>
+      <label>Client<select name="client"><option>Cloud Code / Cloud Shell</option><option>Google Cloud quotas</option><option>Codex</option><option>Antigravity CLI</option><option>Antigravity</option><option>Gemini API</option><option>GitHub Copilot</option><option>VS Code</option><option>Other</option></select></label>
       <label>Display name / project<input name="display_name" maxlength="120" placeholder="Primary Cloud project / Personal Codex / Work"></label>
+      <label>Label (optional)<input name="label" maxlength="80" placeholder="e.g. Work, Personal, Project X"></label>
+      <label>Group (optional)<input name="group_name" maxlength="80" placeholder="e.g. Production, Dev"></label>
       <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button value="default" class="button primary">Save</button></div>
     </form>
   </dialog>
 
+  <!-- Account detail dialog -->
   <dialog id="detailDialog">
     <div class="detail-dialog">
       <div class="detail-head"><div><div id="detailName" class="detail-name">Account</div><div id="detailMeta" class="detail-meta"></div></div><button id="closeDetail" class="button">Close</button></div>
@@ -90,11 +208,12 @@
     </div>
   </dialog>
 
+  <!-- Delete dialog -->
   <dialog id="deleteDialog" class="danger-dialog">
     <form method="dialog" id="deleteForm">
       <div class="danger-icon">!</div>
       <h2>Delete registered account?</h2>
-      <p id="deleteMessage">This removes the account/project and its stored quota history from this local AI Quota instance.</p>
+      <p id="deleteMessage">This removes the account/project and its stored quota history from this local AI-Quota instance.</p>
       <div class="dialog-actions"><button value="cancel" class="button">Cancel</button><button id="confirmDelete" value="default" class="button danger-button">Delete account</button></div>
     </form>
   </dialog>
