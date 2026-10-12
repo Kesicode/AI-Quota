@@ -58,6 +58,7 @@ def load_builtin_adapters() -> None:
         ("providers.gemini.adapter",          "providers/gemini/adapter.py"),
         ("providers.google_cloud.adapter",    "providers/google-cloud/adapter.py"),
         ("providers.cloud_code.adapter",      "providers/cloud-code/adapter.py"),
+        ("providers.vscode.adapter",          "providers/vscode/adapter.py"),
     ]
     # Legacy adapters (fully intact — still loaded as fallback)
     _LEGACY_MODULES = [

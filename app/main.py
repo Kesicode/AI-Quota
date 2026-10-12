@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -28,12 +29,22 @@ STATIC_DIR = ROOT / "static"
 
 logger = get_logger("ai_quota.main")
 
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):  # noqa: ARG001
+    logger.info("Initializing AI Quota database…")
+    init_db()
+    yield
+    # Shutdown — nothing to clean up currently
+
+
 app = FastAPI(
     title="AI-Quota",
     version="2.0.0",
     description="Universal AI Account & Quota Manager",
     docs_url="/api/docs",
     redoc_url=None,
+    lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -44,11 +55,6 @@ try:
 except ImportError:
     pass  # v1 routes being built — non-fatal during migration
 
-
-@app.on_event("startup")
-def on_startup() -> None:
-    logger.info("Initializing AI Quota database...")
-    init_db()
 
 
 def normalize_account(account: dict[str, Any]) -> dict[str, Any]:
