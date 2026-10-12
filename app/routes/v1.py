@@ -311,15 +311,34 @@ def get_quota_for_account(account_id: int) -> dict[str, Any]:
 
 # ─── History ──────────────────────────────────────────────────────────────
 
+
 @router.get("/history")
-def get_history_all(period: str = Query(default="24h")) -> list[dict[str, Any]]:
+def get_history_all(
+    period: str = Query(default="24h"),
+    format: str = Query(default="json", description="json | csv"),
+) -> Any:
+    """
+    Return quota history for ALL accounts, flat-merged.
+    Supports ?format=csv for CSV export.
+    """
     from app.services.account_service import list_accounts
-    from app.services import list_snapshots
-    results = []
+    all_points: list[dict[str, Any]] = []
     for acc in list_accounts():
-        snaps = _history_for_account(acc["id"], period)
-        results.append({"account_id": acc["id"], "period": period, "points": snaps})
-    return results
+        pts = _history_for_account(acc["id"], period)
+        for p in pts:
+            p["account_id"] = acc.get("account_id") or str(acc["id"])
+            p["email"] = acc.get("email", "")
+        all_points.extend(pts)
+
+    if format == "csv":
+        return _history_to_csv_response(all_points, f"ai_quota_history_{period}.csv")
+
+    return {
+        "period": period,
+        "total_points": len(all_points),
+        "points": all_points,
+    }
+
 
 
 @router.get("/history/{account_id}")
@@ -348,6 +367,22 @@ def _history_for_account(account_id: int, period: str) -> list[dict[str, Any]]:
             (account_id, f"-{days} days"),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _history_to_csv_response(points: list[dict[str, Any]], filename: str) -> Response:
+    """Convert list of snapshot dicts to a streaming CSV download Response."""
+    import csv, io
+    if not points:
+        return Response(content="No data available for the requested period.", media_type="text/plain")
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(points[0].keys()))
+    writer.writeheader()
+    writer.writerows(points)
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─── Events ───────────────────────────────────────────────────────────────
@@ -520,3 +555,137 @@ def update_settings(updates: dict[str, str]) -> dict[str, Any]:
         raise HTTPException(500, str(exc))
 
     return {"updated": updated, "rejected": rejected}
+
+
+# ─── History Export & Analytics (Phase 10) ───────────────────────────────
+
+@router.get("/history/{account_id}/export")
+def export_account_history(
+    account_id: int,
+    period: str = Query("7d", description="24h | 7d | 30d"),
+    format: str = Query("json", description="json | csv"),
+) -> Any:
+    """
+    Export quota history for a single account as JSON or CSV.
+    GET /api/v1/history/1/export?period=7d&format=csv
+    """
+    from app.services import get_account_by_id
+    if not get_account_by_id(account_id):
+        raise HTTPException(404, "Account not found")
+    points = _history_for_account(account_id, period)
+    if format == "csv":
+        return _history_to_csv_response(points, f"ai_quota_history_{account_id}_{period}.csv")
+    return {
+        "account_id": account_id,
+        "period": period,
+        "total_points": len(points),
+        "points": points,
+    }
+
+
+@router.get("/analytics")
+def get_analytics(period: str = Query("7d", description="24h | 7d | 30d")) -> dict[str, Any]:
+    """
+    Aggregated analytics across all accounts.
+    Returns avg_quota_percent, max_quota_percent, most_used_account,
+    accounts_with_data, period, total_snapshots.
+    """
+    from app.services.account_service import list_accounts
+    per_account: dict[str, list[float]] = {}
+    total = 0
+
+    for acc in list_accounts():
+        points = _history_for_account(acc["id"], period)
+        total += len(points)
+        key = acc.get("account_id") or str(acc["id"])
+        pcts = [
+            float(p["remaining_percent"])
+            for p in points
+            if p.get("remaining_percent") is not None
+        ]
+        if pcts:
+            per_account[key] = pcts
+
+    all_pcts = [v for vals in per_account.values() for v in vals]
+    avg = sum(all_pcts) / len(all_pcts) if all_pcts else None
+    mx = max(all_pcts) if all_pcts else None
+    most_used = (
+        min(per_account, key=lambda k: sum(per_account[k]) / len(per_account[k]))
+        if per_account else None
+    )
+
+    return {
+        "period": period,
+        "total_snapshots": total,
+        "accounts_with_data": len(per_account),
+        "avg_quota_percent": round(avg, 1) if avg is not None else None,
+        "max_quota_percent": round(mx, 1) if mx is not None else None,
+        "most_used_account_id": most_used,
+    }
+
+
+
+def _history_points(account_id: int, period: str) -> list[dict[str, Any]]:
+    """Return detailed snapshot rows for an account filtered by period (uses quota_snapshots table)."""
+    from datetime import datetime, timezone, timedelta
+
+    _PERIOD_MAP = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}
+
+    days = _PERIOD_MAP.get(period, 7)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    try:
+        from app.database import db_session
+        with db_session() as conn:
+            rows = conn.execute(
+                """
+                SELECT window_name, quota_bucket, remaining_percent,
+                       used_units, limit_units, unit, reset_at,
+                       source, captured_at, staleness_tier
+                FROM quota_snapshots
+                WHERE account_id = ? AND captured_at >= ?
+                ORDER BY captured_at ASC
+                """,
+                (account_id, cutoff),
+            ).fetchall()
+    except Exception:
+        return []
+
+    return [
+        {
+            "window_name": r[0],
+            "quota_bucket": r[1],
+            "remaining_percent": r[2],
+            "used_units": r[3],
+            "limit_units": r[4],
+            "unit": r[5],
+            "reset_at": r[6],
+            "source": r[7],
+            "captured_at": r[8],
+            "staleness_tier": r[9],
+        }
+        for r in rows
+    ]
+
+
+def _points_to_csv_response(points: list[dict[str, Any]], filename: str) -> Response:
+    """Convert list of point dicts to a CSV download response."""
+    import csv
+    import io
+
+    if not points:
+        return Response(
+            content="No data available for the requested period.",
+            media_type="text/plain",
+        )
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(points[0].keys()))
+    writer.writeheader()
+    writer.writerows(points)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

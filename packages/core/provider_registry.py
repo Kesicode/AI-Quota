@@ -48,15 +48,19 @@ def load_builtin_adapters() -> None:
     Discover and load all built-in provider adapters.
     Attempts to import each known provider module; missing ones are skipped silently.
     """
-    _builtin_modules = [
-        "providers.antigravity.adapter",
-        "providers.antigravity_cli.adapter",
-        "providers.codex.adapter",
-        "providers.copilot.adapter",
-        "providers.gemini.adapter",
-        "providers.google_cloud.adapter",
-        "providers.cloud_code.adapter",
-        # Legacy adapters (old paths — for backward compat during migration)
+    # Python modules can't have hyphens — use importlib with path manipulation
+    _MONOREPO_ADAPTERS = [
+        # New monorepo providers/ adapters (hyphenated dirs require sys.path trick)
+        ("providers.antigravity.adapter",     "providers/antigravity/adapter.py"),
+        ("providers.antigravity_cli.adapter", "providers/antigravity-cli/adapter.py"),
+        ("providers.codex.adapter",           "providers/codex/adapter.py"),
+        ("providers.copilot.adapter",         "providers/copilot/adapter.py"),
+        ("providers.gemini.adapter",          "providers/gemini/adapter.py"),
+        ("providers.google_cloud.adapter",    "providers/google-cloud/adapter.py"),
+        ("providers.cloud_code.adapter",      "providers/cloud-code/adapter.py"),
+    ]
+    # Legacy adapters (fully intact — still loaded as fallback)
+    _LEGACY_MODULES = [
         "app.providers.antigravity_2",
         "app.providers.antigravity_cli",
         "app.providers.codex",
@@ -67,24 +71,55 @@ def load_builtin_adapters() -> None:
         "app.providers.vscode",
     ]
 
+
+
     loaded = []
-    for module_path in _builtin_modules:
+
+    # Pass 1 — monorepo providers/ adapters (file-based import via importlib.util)
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    _repo_root = Path(__file__).parent.parent.parent  # AI-Quota root
+
+    for module_name, rel_path in _MONOREPO_ADAPTERS:
+        abs_path = _repo_root / rel_path
+        if not abs_path.exists():
+            continue
         try:
-            mod = importlib.import_module(module_path)
-            # Each adapter module is expected to call register() on import,
-            # or expose a create_adapter() factory function.
+            if module_name not in sys.modules:
+                spec = importlib.util.spec_from_file_location(module_name, abs_path)
+                if spec is None:
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = mod
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            else:
+                mod = sys.modules[module_name]
+
             if hasattr(mod, "create_adapter"):
                 adapter = mod.create_adapter()
                 register(adapter)
-                loaded.append(module_path)
+                loaded.append(f"{module_name} (monorepo)")
+        except Exception as exc:
+            logger.warning("Failed to load monorepo adapter %s: %s", module_name, exc)
+
+    # Pass 2 — legacy app/providers/ adapters (only for providers not yet in monorepo)
+    for module_path in _LEGACY_MODULES:
+        try:
+            mod = importlib.import_module(module_path)
+            if hasattr(mod, "create_adapter"):
+                adapter = mod.create_adapter()
+                if adapter.id not in _ADAPTERS:   # don't overwrite monorepo version
+                    register(adapter)
+                    loaded.append(f"{module_path} (legacy)")
             elif hasattr(mod, "_register"):
                 mod._register()
-                loaded.append(module_path)
-            else:
-                loaded.append(f"{module_path} (auto-registered)")
+                loaded.append(f"{module_path} (legacy _register)")
         except ImportError:
-            pass  # Provider not yet implemented — skip silently
+            pass
         except Exception as exc:
-            logger.warning("Failed to load provider adapter %s: %s", module_path, exc)
+            logger.warning("Failed to load legacy adapter %s: %s", module_path, exc)
 
     logger.info("Loaded %d provider adapters: %s", len(loaded), loaded)
+
