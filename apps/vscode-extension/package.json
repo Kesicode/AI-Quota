@@ -12,6 +12,12 @@
   "engines": {
     "vscode": "^1.85.0"
   },
+  "scripts": {
+    "build": "node esbuild.js --production",
+    "dev": "node esbuild.js --watch",
+    "package": "npx @vscode/vsce package --no-dependencies",
+    "lint": "npx eslint src --ext .ts"
+  },
   "categories": [
     "Other",
     "Snippets"
