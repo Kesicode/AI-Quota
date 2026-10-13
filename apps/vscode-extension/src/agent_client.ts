@@ -108,6 +108,36 @@ export interface WebhookConfig {
   webhook_enabled: boolean;
 }
 
+export interface MatrixWindow {
+  remaining_pct: number | null;
+  reset_at: string | null;
+  staleness: string;
+  used_units: number | null;
+  limit_units: number | null;
+  unit: string | null;
+}
+
+export interface MatrixAccount {
+  id: number;
+  account_id: string;
+  display_name: string;
+  email: string | null;
+  provider: string;
+  client: string;
+  label: string;
+  status: string;
+  best_remaining: number | null;
+  windows: Record<string, MatrixWindow>;
+}
+
+export interface MatrixData {
+  windows: string[];
+  providers: string[];
+  accounts: MatrixAccount[];
+  total: number;
+  generated_at: string;
+}
+
 export class AgentClient {
   private baseUrl: string;
   private timeout: number;
@@ -239,5 +269,10 @@ export class AgentClient {
 
   async testWebhook(): Promise<{ ok: boolean; http_status?: number; error?: string }> {
     return this.fetch("/api/v1/webhooks/test", { method: "POST" });
+  }
+
+  async getMatrix(provider = ""): Promise<MatrixData> {
+    const qs = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+    return this.fetch<MatrixData>(`/api/v1/matrix${qs}`);
   }
 }

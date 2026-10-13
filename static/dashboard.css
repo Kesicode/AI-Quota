@@ -1116,3 +1116,74 @@ select:focus {
 .wh-status { font-size: .78rem; padding: .35rem .6rem; border-radius: 6px; display: inline-block; }
 .wh-status.ok  { color: #4fa84f; background: rgba(79,168,79,.1); }
 .wh-status.err { color: #e74c3c; background: rgba(231,76,60,.1); }
+
+/* ── Quota Matrix tab ────────────────────────────────────────────────── */
+.matrix-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .78rem;
+  table-layout: auto;
+  min-width: 480px;
+}
+.matrix-table th {
+  background: rgba(26,158,92,.08);
+  border: 1px solid var(--border);
+  padding: .45rem .7rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.matrix-table td {
+  border: 1px solid var(--border);
+  padding: .4rem .65rem;
+  vertical-align: middle;
+}
+.matrix-table tr:hover td { background: rgba(255,255,255,.025); }
+
+/* Account name cell */
+.mx-name { font-weight: 500; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.mx-tag  { font-size: .68rem; color: var(--muted); font-family: var(--mono); }
+
+/* Window quota cell */
+.mx-cell { text-align: center; min-width: 80px; }
+.mx-pct  { font-family: var(--mono); font-size: .82rem; font-weight: 600; }
+.mx-pct.hi   { color: #4fa84f; }
+.mx-pct.mid  { color: var(--accent); }
+.mx-pct.low  { color: var(--warn); }
+.mx-pct.crit { color: var(--error); }
+.mx-pct.none { color: rgba(255,255,255,.2); font-weight: 400; }
+.mx-bar-wrap { width: 100%; height: 3px; background: rgba(255,255,255,.06); border-radius: 2px; margin: 3px 0; }
+.mx-bar      { height: 3px; border-radius: 2px; transition: width .3s; }
+.mx-staleness { font-size: .62rem; color: var(--muted); margin-top: 1px; }
+.mx-reset     { font-size: .65rem; color: var(--muted); }
+
+/* Status badge */
+.mx-status { display: inline-flex; align-items: center; gap: 4px; font-size: .7rem; }
+.mx-status .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.mx-status .dot.live   { background: #4fa84f; box-shadow: 0 0 4px #4fa84f; }
+.mx-status .dot.stale  { background: var(--warn); }
+.mx-status .dot.offline{ background: rgba(255,255,255,.2); }
+
+/* Provider filter strip */
+.mx-filter-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; flex-wrap: wrap; }
+.mx-chip {
+  padding: .2rem .55rem; border-radius: 20px; font-size: .72rem; font-weight: 500;
+  border: 1px solid var(--border); background: rgba(255,255,255,.03);
+  color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.mx-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Best account highlight */
+.matrix-table tr.mx-best td { background: rgba(26,158,92,.05); }
+.matrix-table tr.mx-best td:first-child { border-left: 2px solid var(--accent); }
+
+/* Summary bar */
+.mx-summary { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.mx-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .9rem; }
+.mx-stat-val { font-size: 1.15rem; font-weight: 700; font-family: var(--mono); color: var(--accent); }
+.mx-stat-lbl { font-size: .68rem; color: var(--muted); margin-top: 1px; }

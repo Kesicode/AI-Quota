@@ -42,6 +42,7 @@
       <button class="tab-btn" data-tab="predictions" role="tab" aria-selected="false">Predictions</button>
       <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
       <button class="tab-btn" data-tab="diagnostics" role="tab" aria-selected="false">Diagnostics</button>
+      <button class="tab-btn" data-tab="matrix" role="tab" aria-selected="false">Matrix</button>
     </nav>
 
     <!-- ── Accounts tab ── -->
@@ -199,6 +200,28 @@
         </div>
       </section>
     </div>
+
+    <!-- ── Matrix tab ── -->
+    <div id="tab-matrix" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Quota Matrix</h2>
+            <p>All accounts × all quota windows — live cross-provider overview. Provider truth preserved.</p>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select id="matrixProviderFilter" class="settings-input" style="font-size:.78rem;padding:.3rem .6rem">
+              <option value="">All providers</option>
+            </select>
+            <button id="refreshMatrix" class="button">Refresh</button>
+          </div>
+        </div>
+        <div id="matrix-body">
+          <div class="loading-row">Loading matrix…</div>
+        </div>
+      </section>
+    </div>
+
 
     <section class="security">
       <strong>Local-only security boundary</strong>

@@ -293,5 +293,39 @@ class V1ApiTestCase(unittest.TestCase):
         self.assertIsInstance(body["predictions"], list)
 
 
+    # ── Phase 20 — Quota Matrix endpoint ─────────────────────────────────────
+
+    def test_matrix_returns_expected_shape(self) -> None:
+        """GET /api/v1/matrix returns windows, providers, accounts, total."""
+        r = self.client.get("/api/v1/matrix")
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertIn("windows",      body)
+        self.assertIn("providers",    body)
+        self.assertIn("accounts",     body)
+        self.assertIn("total",        body)
+        self.assertIn("generated_at", body)
+        self.assertIsInstance(body["windows"],   list)
+        self.assertIsInstance(body["providers"], list)
+        self.assertIsInstance(body["accounts"],  list)
+
+    def test_matrix_account_has_windows_dict(self) -> None:
+        """Each account in matrix has a windows dict."""
+        self.client.post("/api/accounts", json={
+            "email": "matrix@example.com", "provider": "TestProvider", "client": "TestClient"
+        })
+        r = self.client.get("/api/v1/matrix")
+        self.assertEqual(r.status_code, 200)
+        for acc in r.json()["accounts"]:
+            self.assertIn("windows",       acc)
+            self.assertIn("status",        acc)
+            self.assertIn("best_remaining", acc)
+            self.assertIsInstance(acc["windows"], dict)
+
+    def test_matrix_total_matches_accounts(self) -> None:
+        r = self.client.get("/api/v1/matrix")
+        body = r.json()
+        self.assertEqual(body["total"], len(body["accounts"]))
+
 if __name__ == "__main__":
     unittest.main()

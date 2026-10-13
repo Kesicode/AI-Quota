@@ -838,6 +838,7 @@
         if (tab === 'settings') loadSettings();
         if (tab === 'diagnostics') loadDiagnostics();
         if (tab === 'predictions') loadPredictions();
+        if (tab === 'matrix') loadMatrix();
       });
     });
   }
@@ -1191,3 +1192,177 @@
       container.innerHTML = '<p class="error-text">Failed to load webhook config.</p>';
     }
   }
+
+
+  // ── Matrix tab ──────────────────────────────────────────────────────────────
+  let _matrixData = null;
+  let _matrixProvider = '';
+
+  async function loadMatrix() {
+    const body = $('#matrix-body');
+    if (!body) return;
+    try {
+      const data = await apiFetch('/api/v1/matrix');
+      _matrixData = data;
+      renderMatrix(data, _matrixProvider);
+      buildProviderChips(data.providers);
+    } catch (e) {
+      if (body) body.innerHTML = `<p class="error-text">Failed to load matrix: ${e.message}</p>`;
+    }
+  }
+
+  function buildProviderChips(providers) {
+    const body = $('#matrix-body');
+    if (!body) return;
+    // Insert chip strip before table
+    const strip = body.querySelector('.mx-filter-row');
+    if (strip) strip.remove();
+    const row = document.createElement('div');
+    row.className = 'mx-filter-row';
+    const allChip = document.createElement('button');
+    allChip.className = 'mx-chip' + (_matrixProvider === '' ? ' active' : '');
+    allChip.textContent = 'All';
+    allChip.onclick = () => { _matrixProvider = ''; loadMatrix(); };
+    row.appendChild(allChip);
+    providers.forEach(p => {
+      const chip = document.createElement('button');
+      chip.className = 'mx-chip' + (_matrixProvider === p ? ' active' : '');
+      chip.textContent = p;
+      chip.onclick = () => { _matrixProvider = p; if (_matrixData) renderMatrix(_matrixData, p); buildProviderChips(_matrixData.providers); };
+      row.appendChild(chip);
+    });
+    body.insertBefore(row, body.firstChild);
+  }
+
+  function pctClass(pct) {
+    if (pct === null || pct === undefined) return 'none';
+    if (pct >= 60) return 'hi';
+    if (pct >= 30) return 'mid';
+    if (pct >= 15) return 'low';
+    return 'crit';
+  }
+
+  function barColor(pct) {
+    if (pct === null || pct === undefined) return 'rgba(255,255,255,.06)';
+    if (pct >= 60) return '#4fa84f';
+    if (pct >= 30) return '#1a9e5c';
+    if (pct >= 15) return '#f0a500';
+    return '#e53935';
+  }
+
+  function fmtResetShort(iso) {
+    if (!iso) return '';
+    const diff = new Date(iso).getTime() - Date.now();
+    if (diff <= 0) return '↺ soon';
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    return h > 0 ? `↺ ${h}h${m}m` : `↺ ${m}m`;
+  }
+
+  function dotClass(status) {
+    if (status === 'live') return 'live';
+    if (status === 'stale' || status === 'recent') return 'stale';
+    return 'offline';
+  }
+
+  function renderMatrix(data, filterProvider = '') {
+    const body = $('#matrix-body');
+    if (!body) return;
+
+    const accounts = filterProvider
+      ? data.accounts.filter(a => a.provider === filterProvider)
+      : data.accounts;
+
+    const windows = data.windows;
+
+    // ── Summary stats ────────────────────────────────────────────────────────
+    const liveCount = accounts.filter(a => a.status === 'live').length;
+    const avgBest = accounts.filter(a => a.best_remaining !== null);
+    const avgPct = avgBest.length
+      ? (avgBest.reduce((s, a) => s + a.best_remaining, 0) / avgBest.length).toFixed(0)
+      : '—';
+    const bestAcc = accounts.reduce((b, a) =>
+      (a.best_remaining ?? -1) > (b?.best_remaining ?? -1) ? a : b, null);
+
+    const summary = `
+      <div class="mx-summary">
+        <div class="mx-stat">
+          <div class="mx-stat-val">${accounts.length}</div>
+          <div class="mx-stat-lbl">Total accounts</div>
+        </div>
+        <div class="mx-stat">
+          <div class="mx-stat-val" style="color:#4fa84f">${liveCount}</div>
+          <div class="mx-stat-lbl">Live</div>
+        </div>
+        <div class="mx-stat">
+          <div class="mx-stat-val">${avgPct}%</div>
+          <div class="mx-stat-lbl">Avg best quota</div>
+        </div>
+        <div class="mx-stat">
+          <div class="mx-stat-val" style="font-size:.9rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bestAcc ? (bestAcc.label || bestAcc.display_name) : '—'}</div>
+          <div class="mx-stat-lbl">Top account</div>
+        </div>
+      </div>`;
+
+    // ── Table ────────────────────────────────────────────────────────────────
+    const headerCols = windows.map(w => `<th class="mx-cell">${w}</th>`).join('');
+
+    const rows = accounts.map((acc, i) => {
+      const isBest = bestAcc && acc.id === bestAcc.id && acc.best_remaining !== null;
+      const dc = dotClass(acc.status);
+      const nameCell = `
+        <td>
+          <div class="mx-name" title="${acc.email || ''}">${acc.label || acc.display_name}</div>
+          <div class="mx-tag">${acc.provider} · ${acc.client}</div>
+        </td>
+        <td>
+          <span class="mx-status">
+            <span class="dot ${dc}"></span>
+            ${acc.status}
+          </span>
+        </td>`;
+
+      const windowCells = windows.map(w => {
+        const win = acc.windows[w];
+        if (!win || win.remaining_pct === null) {
+          return `<td class="mx-cell"><span class="mx-pct none">—</span></td>`;
+        }
+        const pct = win.remaining_pct;
+        const cls = pctClass(pct);
+        const color = barColor(pct);
+        const stale = win.staleness !== 'LIVE' && win.staleness !== 'live'
+          ? `<div class="mx-staleness">${win.staleness.toLowerCase()}</div>` : '';
+        const reset = fmtResetShort(win.reset_at);
+        return `<td class="mx-cell">
+          <div class="mx-pct ${cls}">${pct.toFixed(0)}%</div>
+          <div class="mx-bar-wrap"><div class="mx-bar" style="width:${pct}%;background:${color}"></div></div>
+          ${reset ? `<div class="mx-reset">${reset}</div>` : ''}
+          ${stale}
+        </td>`;
+      }).join('');
+
+      return `<tr class="${isBest ? 'mx-best' : ''}">${nameCell}${windowCells}</tr>`;
+    }).join('') || `<tr><td colspan="${windows.length + 2}" style="text-align:center;color:var(--muted);padding:2rem">No accounts match filter</td></tr>`;
+
+    const table = `
+      <div class="matrix-wrap">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Status</th>
+              ${headerCols}
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+
+    // Preserve chip strip if present, rebuild rest
+    const existingStrip = body.querySelector('.mx-filter-row');
+    body.innerHTML = summary + table;
+    if (existingStrip) body.insertBefore(existingStrip, body.firstChild);
+    else buildProviderChips(data.providers);
+  }
+
+  $('#refreshMatrix')?.addEventListener('click', loadMatrix);

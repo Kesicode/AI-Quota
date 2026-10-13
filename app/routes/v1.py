@@ -959,3 +959,100 @@ def fire_quota_alerts() -> dict[str, Any]:
             errors.append(f"{acc.get('email')}: {e}")
 
     return {"ok": True, "fired": fired, "errors": errors}
+
+
+# ─── Phase 20 — Quota Matrix ──────────────────────────────────────────────────
+
+@router.get("/matrix")
+def get_quota_matrix() -> dict[str, Any]:
+    """
+    GET /api/v1/matrix
+
+    Returns a structured cross-account, cross-window quota grid.
+
+    Shape:
+      {
+        "windows":    ["5h", "1h", "daily", ...],   # all unique window names
+        "providers":  ["antigravity", "gemini", ...],
+        "accounts": [
+          {
+            "id": 1,
+            "account_id": "acc_...",
+            "display_name": "user@example.com",
+            "provider": "antigravity",
+            "client": "desktop",
+            "label": "Work",
+            "status": "live",
+            "best_remaining": 72.5,
+            "windows": {
+              "5h":    {"remaining_pct": 72.5, "reset_at": "...", "staleness": "live"},
+              "1h":    {"remaining_pct": 55.0, "reset_at": "...", "staleness": "recent"},
+            }
+          }
+        ],
+        "generated_at": "..."
+      }
+
+    Provider truth is preserved — each row only shows its own provider's data.
+    Accounts with no snapshots still appear (with null window values).
+    Never mixes unrelated provider quota systems.
+    """
+    from app.services import list_accounts, get_latest_snapshots
+    from app.utils.time import now_iso
+
+    accounts = list_accounts()
+    all_windows: set[str] = set()
+    rows = []
+
+    for acc in accounts:
+        snaps = get_latest_snapshots(acc["id"])
+        windows: dict[str, Any] = {}
+        for s in snaps:
+            wname = s.get("window_name") or "default"
+            all_windows.add(wname)
+            pct = s.get("remaining_percent")
+            windows[wname] = {
+                "remaining_pct": round(float(pct), 1) if pct is not None else None,
+                "reset_at":      s.get("reset_at"),
+                "staleness":     s.get("staleness_tier", "UNKNOWN"),
+                "used_units":    s.get("used_units"),
+                "limit_units":   s.get("limit_units"),
+                "unit":          s.get("unit"),
+            }
+
+        best = acc.get("best_remaining")
+        rows.append({
+            "id":            acc["id"],
+            "account_id":    acc.get("account_id") or str(acc["id"]),
+            "display_name":  acc.get("display_name") or acc.get("email") or f"Account {acc['id']}",
+            "email":         acc.get("email"),
+            "provider":      acc.get("provider", "unknown"),
+            "client":        acc.get("client", ""),
+            "label":         acc.get("label", ""),
+            "status":        acc.get("status", "unknown"),
+            "best_remaining": round(float(best), 1) if best is not None else None,
+            "windows":       windows,
+        })
+
+    # Sort windows by common order, then alphabetical
+    window_order = ["5h", "1h", "daily", "monthly", "default"]
+    sorted_windows = sorted(
+        all_windows,
+        key=lambda w: (window_order.index(w) if w in window_order else 99, w),
+    )
+
+    # Sort rows: best quota first (live accounts prioritised)
+    rows.sort(key=lambda r: (
+        0 if r["status"] == "live" else 1,
+        -(r["best_remaining"] or 0),
+    ))
+
+    providers = sorted({r["provider"] for r in rows})
+
+    return {
+        "windows":      sorted_windows,
+        "providers":    providers,
+        "accounts":     rows,
+        "total":        len(rows),
+        "generated_at": now_iso(),
+    }
