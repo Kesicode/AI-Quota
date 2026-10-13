@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     display_name    TEXT    NOT NULL DEFAULT '',
     label           TEXT    NOT NULL DEFAULT '',
     group_name      TEXT    NOT NULL DEFAULT '',
-    color           TEXT    NOT NULL DEFAULT '',
+    color           TEXT    NOT NULL DEFAULT '',`r`n    notes           TEXT    DEFAULT NULL,
     priority        INTEGER NOT NULL DEFAULT 50,
     enabled         INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT    NOT NULL,
@@ -184,6 +184,7 @@ MIGRATION_COLUMNS: list[tuple[str, str, str]] = [
     ("accounts", "color",               "TEXT NOT NULL DEFAULT ''"),
     ("accounts", "priority",            "INTEGER NOT NULL DEFAULT 50"),
     ("accounts", "credential_ref",      "TEXT DEFAULT NULL"),
+    ("accounts", "notes",               "TEXT DEFAULT NULL"),
     ("quota_snapshots", "quota_bucket",     "TEXT NOT NULL DEFAULT 'default'"),
     ("quota_snapshots", "staleness_tier",   "TEXT NOT NULL DEFAULT 'UNKNOWN'"),
 ]

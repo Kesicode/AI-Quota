@@ -33,6 +33,7 @@ from typing import Any, AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 router = APIRouter(tags=["v1"])
 
@@ -741,3 +742,220 @@ def get_predictions(period: str = Query("24h", description="History window: 24h 
         "generated_at":      result.generated_at,
         "predictions":       [_ser(p) for p in result.predictions],
     }
+
+
+# ─── Phase 16 — Account Label / Notes Editor ──────────────────────────────
+
+class AccountLabelUpdate(BaseModel):
+    label:      str | None = None
+    group_name: str | None = None
+    color:      str | None = None
+    notes:      str | None = None
+    priority:   int | None = None
+
+
+@router.patch("/accounts/{account_id}/label")
+def update_account_label(account_id: int, body: AccountLabelUpdate) -> dict[str, Any]:
+    """
+    PATCH /api/v1/accounts/{id}/label
+    Update display metadata: label, group, color, notes, priority.
+    These fields are purely local — never synced to the provider.
+    """
+    from app.database import db_session
+    from app.services import get_account_by_id
+
+    acc = get_account_by_id(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+
+    updates: dict[str, Any] = {}
+    if body.label      is not None: updates["label"]      = body.label
+    if body.group_name is not None: updates["group_name"] = body.group_name
+    if body.color      is not None: updates["color"]      = body.color
+    if body.notes      is not None: updates["notes"]      = body.notes
+    if body.priority   is not None: updates["priority"]   = body.priority
+
+    if not updates:
+        raise HTTPException(422, "No fields to update")
+
+    set_clauses = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [account_id]
+
+    try:
+        with db_session() as conn:
+            conn.execute(
+                f"UPDATE accounts SET {set_clauses}, last_seen_at = datetime('now') WHERE id = ?",
+                values,
+            )
+        refreshed = get_account_by_id(account_id)
+        return refreshed or {}
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+@router.get("/accounts/{account_id}/notes")
+def get_account_notes(account_id: int) -> dict[str, Any]:
+    """Return just the notes/label fields for an account."""
+    from app.services import get_account_by_id
+    acc = get_account_by_id(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    return {
+        "account_id": account_id,
+        "label":      acc.get("label"),
+        "group_name": acc.get("group_name"),
+        "color":      acc.get("color"),
+        "notes":      acc.get("notes"),
+        "priority":   acc.get("priority"),
+    }
+
+
+# ─── Phase 17 — Webhook / Alert System ────────────────────────────────────
+
+_WEBHOOK_SAFE_KEYS = frozenset(["webhook_url", "webhook_threshold", "webhook_enabled"])
+
+
+class WebhookConfig(BaseModel):
+    webhook_url:       str | None = None
+    webhook_threshold: int | None = None   # 0-100 percent
+    webhook_enabled:   bool | None = None
+
+
+@router.get("/webhooks/config")
+def get_webhook_config() -> dict[str, Any]:
+    """Return current webhook configuration from settings table."""
+    from app.database import db_session
+    try:
+        with db_session() as conn:
+            rows = conn.execute(
+                "SELECT key, value FROM settings WHERE key IN ('webhook_url','webhook_threshold','webhook_enabled')"
+            ).fetchall()
+        cfg = {r["key"]: r["value"] for r in rows}
+        return {
+            "webhook_url":       cfg.get("webhook_url"),
+            "webhook_threshold": int(cfg["webhook_threshold"]) if "webhook_threshold" in cfg else 20,
+            "webhook_enabled":   cfg.get("webhook_enabled", "false").lower() == "true",
+        }
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+@router.put("/webhooks/config")
+def update_webhook_config(body: WebhookConfig) -> dict[str, Any]:
+    """Persist webhook settings. URL stored locally — never sent to provider."""
+    from app.database import db_session
+    from app.utils.time import now_iso
+
+    updates: dict[str, str] = {}
+    if body.webhook_url       is not None: updates["webhook_url"]       = body.webhook_url
+    if body.webhook_threshold is not None: updates["webhook_threshold"] = str(body.webhook_threshold)
+    if body.webhook_enabled   is not None: updates["webhook_enabled"]   = str(body.webhook_enabled).lower()
+
+    if not updates:
+        raise HTTPException(422, "No fields to update")
+
+    now = now_iso()
+    try:
+        with db_session() as conn:
+            for key, value in updates.items():
+                conn.execute(
+                    "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
+                    (key, value, now),
+                )
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+    return {"updated": list(updates.keys()), "ok": True}
+
+
+@router.post("/webhooks/test")
+def test_webhook() -> dict[str, Any]:
+    """
+    Send a test payload to the configured webhook URL.
+    Payload format: { event, timestamp, message, accounts: [] }
+    """
+    import urllib.request, urllib.error, json as _json
+    from app.utils.time import now_iso
+
+    cfg = get_webhook_config()
+    url = cfg.get("webhook_url")
+    if not url:
+        raise HTTPException(422, "No webhook_url configured")
+    if not cfg.get("webhook_enabled"):
+        raise HTTPException(422, "Webhook is disabled. Enable it first.")
+
+    payload = _json.dumps({
+        "event":     "test",
+        "source":    "ai-quota",
+        "timestamp": now_iso(),
+        "message":   "AI-Quota webhook test — configuration is working.",
+        "accounts":  [],
+    }).encode()
+
+    try:
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "AI-Quota/2.0"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            status = resp.status
+        return {"ok": True, "http_status": status, "url": url}
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "http_status": e.code, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/webhooks/fire")
+def fire_quota_alerts() -> dict[str, Any]:
+    """
+    Scan all accounts and fire webhook alerts for any below the threshold.
+    Called automatically by the sync engine and can be triggered manually.
+    """
+    import urllib.request, urllib.error, json as _json
+    from app.services.account_service import list_accounts
+    from app.utils.time import now_iso
+
+    cfg = get_webhook_config()
+    if not cfg.get("webhook_enabled") or not cfg.get("webhook_url"):
+        return {"ok": True, "fired": 0, "skipped": "webhook_disabled_or_unconfigured"}
+
+    threshold = cfg.get("webhook_threshold", 20)
+    url = cfg["webhook_url"]
+    accounts = list_accounts()
+    fired = 0
+    errors: list[str] = []
+
+    for acc in accounts:
+        pct = acc.get("best_remaining")
+        if pct is None or pct > threshold:
+            continue
+
+        payload = _json.dumps({
+            "event":        "quota_low",
+            "source":       "ai-quota",
+            "timestamp":    now_iso(),
+            "account_id":   acc.get("account_id") or str(acc["id"]),
+            "display_name": acc.get("display_name") or acc.get("email"),
+            "provider":     acc.get("provider"),
+            "remaining_pct": pct,
+            "threshold_pct": threshold,
+            "message": (
+                f"AI-Quota alert: {acc.get('display_name') or acc.get('email')} "
+                f"quota at {pct:.0f}% (threshold: {threshold}%)"
+            ),
+        }).encode()
+        try:
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json", "User-Agent": "AI-Quota/2.0"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+            fired += 1
+        except Exception as e:
+            errors.append(f"{acc.get('email')}: {e}")
+
+    return {"ok": True, "fired": fired, "errors": errors}

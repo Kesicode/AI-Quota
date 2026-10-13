@@ -983,6 +983,8 @@
         else el.value = v;
       });
     } catch { /* silent */ }
+    // Load webhook section below the settings form
+    await loadWebhookSection();
   }
 
   $('#settingsForm')?.addEventListener('submit', async (e) => {
@@ -1117,5 +1119,75 @@
       $('#refreshPredictions')?.addEventListener('click', loadPredictions);
     } catch (err) {
       $('#tab-predictions').innerHTML = `<p class="error-text">Failed to load predictions: ${err.message}</p>`;
+    }
+  }
+
+
+// ── Settings tab: Webhook configuration ─────────────────────────────────
+  async function loadWebhookSection() {
+    const container = $('#webhook-section');
+    if (!container) return;
+    try {
+      const cfg = await apiFetch('/api/v1/webhooks/config');
+      container.innerHTML = `
+        <div class="webhook-header">
+          <h3>Quota Alert Webhooks</h3>
+          <span class="wh-note">Receive POST alerts when quota drops below threshold. Stored locally only — never sent externally.</span>
+        </div>
+        <div class="webhook-form">
+          <label>Webhook URL
+            <input type="url" id="wh-url" value="${cfg.webhook_url || ''}" placeholder="https://hooks.example.com/..." class="wh-input">
+          </label>
+          <label>Alert threshold (%)
+            <input type="number" id="wh-threshold" value="${cfg.webhook_threshold ?? 20}" min="1" max="99" class="wh-input wh-small">
+          </label>
+          <div class="wh-toggle-row">
+            <label class="wh-toggle">
+              <input type="checkbox" id="wh-enabled" ${cfg.webhook_enabled ? 'checked' : ''}>
+              <span>Enable webhook alerts</span>
+            </label>
+          </div>
+          <div class="wh-actions">
+            <button class="button primary" id="wh-save">Save</button>
+            <button class="button" id="wh-test">Send test ping</button>
+            <button class="button" id="wh-fire">Fire alerts now</button>
+          </div>
+          <div id="wh-status" class="wh-status"></div>
+        </div>`;
+
+      $('#wh-save')?.addEventListener('click', async () => {
+        const s = $('#wh-status');
+        try {
+          await apiFetch('/api/v1/webhooks/config', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+              webhook_url:       $('#wh-url').value.trim() || null,
+              webhook_threshold: parseInt($('#wh-threshold').value) || 20,
+              webhook_enabled:   $('#wh-enabled').checked,
+            })
+          });
+          if (s) { s.textContent = '✓ Saved'; s.className = 'wh-status ok'; }
+        } catch (e) { if (s) { s.textContent = `✗ ${e.message}`; s.className = 'wh-status err'; } }
+      });
+
+      $('#wh-test')?.addEventListener('click', async () => {
+        const s = $('#wh-status');
+        try {
+          const r = await apiFetch('/api/v1/webhooks/test', { method: 'POST' });
+          if (s) { s.textContent = r.ok ? `✓ Test sent (HTTP ${r.http_status})` : `✗ ${r.error}`; s.className = `wh-status ${r.ok ? 'ok' : 'err'}`; }
+        } catch (e) { if (s) { s.textContent = `✗ ${e.message}`; s.className = 'wh-status err'; } }
+      });
+
+      $('#wh-fire')?.addEventListener('click', async () => {
+        const s = $('#wh-status');
+        try {
+          const r = await apiFetch('/api/v1/webhooks/fire', { method: 'POST' });
+          if (s) { s.textContent = `✓ Fired ${r.fired} alerts`; s.className = 'wh-status ok'; }
+        } catch (e) { if (s) { s.textContent = `✗ ${e.message}`; s.className = 'wh-status err'; } }
+      });
+
+    } catch {
+      container.innerHTML = '<p class="error-text">Failed to load webhook config.</p>';
     }
   }

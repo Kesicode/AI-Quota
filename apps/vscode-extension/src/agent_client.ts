@@ -77,6 +77,37 @@ export interface DiagnosticsData {
   generated_at: string;
 }
 
+export interface PredictionItem {
+  account_id: number;
+  provider: string;
+  window_name: string;
+  current_pct: number | null;
+  trend: "stable" | "consuming" | "recovering" | "exhausted" | "unknown";
+  velocity_pph: number | null;
+  exhausted_at: string | null;
+  reset_at: string | null;
+  hours_until_exhausted: number | null;
+  hours_until_reset: number | null;
+  recommended: boolean;
+  recommendation_reason: string;
+  risk_level: "none" | "low" | "medium" | "high" | "critical";
+  warning: string | null;
+}
+
+export interface PredictionsData {
+  best_account_id: number | null;
+  best_account_name: string;
+  reason: string;
+  generated_at: string;
+  predictions: PredictionItem[];
+}
+
+export interface WebhookConfig {
+  webhook_url: string | null;
+  webhook_threshold: number;
+  webhook_enabled: boolean;
+}
+
 export class AgentClient {
   private baseUrl: string;
   private timeout: number;
@@ -179,5 +210,34 @@ export class AgentClient {
 
   getDashboardUrl(): string {
     return `${this.baseUrl}/`;
+  }
+
+  async getPredictions(period = "24h"): Promise<PredictionsData> {
+    return this.fetch<PredictionsData>(`/api/v1/predictions?period=${period}`);
+  }
+
+  async updateAccountLabel(
+    accountId: number,
+    fields: { label?: string; group_name?: string; color?: string; notes?: string; priority?: number }
+  ): Promise<AccountData> {
+    return this.fetch<AccountData>(`/api/v1/accounts/${accountId}/label`, {
+      method: "PATCH",
+      body: JSON.stringify(fields),
+    });
+  }
+
+  async getWebhookConfig(): Promise<WebhookConfig> {
+    return this.fetch<WebhookConfig>("/api/v1/webhooks/config");
+  }
+
+  async updateWebhookConfig(cfg: Partial<WebhookConfig>): Promise<unknown> {
+    return this.fetch("/api/v1/webhooks/config", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
+    });
+  }
+
+  async testWebhook(): Promise<{ ok: boolean; http_status?: number; error?: string }> {
+    return this.fetch("/api/v1/webhooks/test", { method: "POST" });
   }
 }

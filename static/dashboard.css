@@ -1099,3 +1099,20 @@ select:focus {
 .pred-risk { font-size:.72rem; font-weight:700; margin-top:.5rem; letter-spacing:.04em; }
 
 .pred-generated { font-size:.73rem; color:var(--muted); margin-top:1rem; text-align:right; }
+
+/* ── Webhook settings section ────────────────────────────────────────── */
+#webhook-section { margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+.webhook-header h3 { font-size: .95rem; font-weight: 600; margin-bottom: .25rem; }
+.wh-note { font-size: .75rem; color: var(--muted); display: block; margin-bottom: 1rem; }
+.webhook-form { display: flex; flex-direction: column; gap: .75rem; }
+.webhook-form label { display: flex; flex-direction: column; gap: .35rem; font-size: .82rem; color: var(--muted); }
+.wh-input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .75rem; color: var(--fg); font-size: .85rem; outline: none; transition: border-color .15s; }
+.wh-input:focus { border-color: var(--accent); }
+.wh-small { max-width: 100px; }
+.wh-toggle-row { display: flex; align-items: center; }
+.wh-toggle { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--fg); cursor: pointer; }
+.wh-toggle input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+.wh-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.wh-status { font-size: .78rem; padding: .35rem .6rem; border-radius: 6px; display: inline-block; }
+.wh-status.ok  { color: #4fa84f; background: rgba(79,168,79,.1); }
+.wh-status.err { color: #e74c3c; background: rgba(231,76,60,.1); }

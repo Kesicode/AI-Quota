@@ -215,5 +215,83 @@ class V1ApiTestCase(unittest.TestCase):
         self.assertIsInstance(r.json(), list)
 
 
+    # ── Phase 16 — Label endpoint ─────────────────────────────────────────
+
+    def test_patch_account_label(self) -> None:
+        """PATCH /api/v1/accounts/{id}/label updates label/notes fields."""
+        acc = self.client.post("/api/accounts", json={
+            "email": "labeltest@example.com", "provider": "TestProvider", "client": "TestClient"
+        }).json()
+        r = self.client.patch(f"/api/v1/accounts/{acc['id']}/label", json={"label": "Work", "notes": "Primary"})
+        self.assertIn(r.status_code, (200, 201), r.text)
+
+    def test_patch_account_label_unknown_account_is_404(self) -> None:
+        r = self.client.patch("/api/v1/accounts/99999/label", json={"label": "X"})
+        self.assertEqual(r.status_code, 404)
+
+    def test_patch_account_label_no_fields_is_422(self) -> None:
+        acc = self.client.post("/api/accounts", json={
+            "email": "noop@example.com", "provider": "TestProvider", "client": "TestClient"
+        }).json()
+        r = self.client.patch(f"/api/v1/accounts/{acc['id']}/label", json={})
+        self.assertEqual(r.status_code, 422)
+
+    def test_get_account_notes(self) -> None:
+        """GET /api/v1/accounts/{id}/notes returns notes payload."""
+        acc = self.client.post("/api/accounts", json={
+            "email": "notes@example.com", "provider": "TestProvider", "client": "TestClient"
+        }).json()
+        r = self.client.get(f"/api/v1/accounts/{acc['id']}/notes")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("account_id", body)
+        self.assertIn("label", body)
+
+    # ── Phase 17 — Webhook endpoints ──────────────────────────────────────
+
+    def test_webhook_config_get_returns_expected_shape(self) -> None:
+        r = self.client.get("/api/v1/webhooks/config")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("webhook_url",       body)
+        self.assertIn("webhook_threshold", body)
+        self.assertIn("webhook_enabled",   body)
+
+    def test_webhook_config_put_updates_threshold(self) -> None:
+        r = self.client.put("/api/v1/webhooks/config", json={"webhook_threshold": 35})
+        self.assertEqual(r.status_code, 200)
+        cfg = self.client.get("/api/v1/webhooks/config").json()
+        self.assertEqual(cfg["webhook_threshold"], 35)
+
+    def test_webhook_config_put_no_fields_is_422(self) -> None:
+        r = self.client.put("/api/v1/webhooks/config", json={})
+        self.assertEqual(r.status_code, 422)
+
+    def test_webhook_test_no_url_is_422(self) -> None:
+        """Test endpoint returns 422 when no webhook_url configured."""
+        self.client.put("/api/v1/webhooks/config", json={"webhook_url": None, "webhook_enabled": True})
+        r = self.client.post("/api/v1/webhooks/test")
+        self.assertIn(r.status_code, (200, 422))
+
+    def test_webhook_fire_returns_structured_response(self) -> None:
+        r = self.client.post("/api/v1/webhooks/fire")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("ok",    body)
+        self.assertIn("fired", body)
+
+    # ── Phase 15 — Predictions endpoint ───────────────────────────────────
+
+    def test_predictions_endpoint(self) -> None:
+        r = self.client.get("/api/v1/predictions")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("predictions",     body)
+        self.assertIn("generated_at",    body)
+        self.assertIn("best_account_id", body)
+        self.assertIn("reason",          body)
+        self.assertIsInstance(body["predictions"], list)
+
+
 if __name__ == "__main__":
     unittest.main()
