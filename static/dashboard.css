@@ -1033,3 +1033,69 @@ select:focus {
 .error-row { color: var(--danger); }
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-head h2 { margin-bottom: 4px; }
+
+/* ── Predictions tab ─────────────────────────────────────────────────── */
+.pred-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
+.pred-header h2 { margin:0; font-size:1.1rem; font-weight:600; }
+
+.pred-recommendation {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  border-radius: 10px;
+  background: rgba(79,168,79,.10);
+  border: 1px solid rgba(79,168,79,.25);
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.pred-rec-label { font-size:.72rem; color: #4fa84f; text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+.pred-rec-name  { font-weight:600; font-size:.95rem; }
+.pred-rec-reason{ font-size:.8rem; color: var(--muted); flex:1; }
+
+.pred-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: .5rem;
+}
+
+.pred-card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  position: relative;
+  transition: transform .15s, box-shadow .15s;
+}
+.pred-card:hover { transform: translateY(-2px); box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.pred-card--best { box-shadow: 0 0 0 1.5px rgba(79,168,79,.4), 0 4px 18px rgba(79,168,79,.12); }
+
+.pred-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.5rem; }
+.pred-provider     { font-size:.78rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+.pred-rec-badge    { font-size:.68rem; background:rgba(79,168,79,.18); color:#4fa84f; padding:.15rem .45rem; border-radius:6px; font-weight:600; }
+
+.pred-pct  { font-size:2rem; font-weight:700; letter-spacing:-.03em; margin:.25rem 0; }
+.pred-trend{ font-size:.82rem; color:var(--muted); margin-bottom:.6rem; }
+
+.pred-stats {
+  display: flex;
+  gap: .75rem;
+  font-size: .78rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+  margin-bottom: .5rem;
+}
+.pred-stats span { white-space: nowrap; }
+
+.pred-warning {
+  font-size: .78rem;
+  color: #f5a623;
+  background: rgba(245,166,35,.08);
+  border-radius: 6px;
+  padding: .3rem .5rem;
+  margin-top: .4rem;
+}
+
+.pred-risk { font-size:.72rem; font-weight:700; margin-top:.5rem; letter-spacing:.04em; }
+
+.pred-generated { font-size:.73rem; color:var(--muted); margin-top:1rem; text-align:right; }

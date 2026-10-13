@@ -689,3 +689,55 @@ def _points_to_csv_response(points: list[dict[str, Any]], filename: str) -> Resp
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ─── Phase 15 — Predictions & Recommendations ─────────────────────────────
+
+@router.get("/predictions")
+def get_predictions(period: str = Query("24h", description="History window: 24h | 7d")) -> dict[str, Any]:
+    """
+    Run the quota prediction engine across all accounts.
+    Returns velocity, exhaustion forecast, reset timing, and account recommendation.
+    """
+    from app.services.account_service import list_accounts
+    from packages.core.prediction_engine import predict_for_account, recommend  # type: ignore
+
+    accounts = list_accounts()
+    predictions = []
+
+    for acc in accounts:
+        snaps = _history_for_account(acc["id"], period)
+        pred = predict_for_account(
+            account_id=acc["id"],
+            provider=acc.get("provider", ""),
+            snapshots=snaps,
+        )
+        predictions.append(pred)
+
+    result = recommend(predictions)
+
+    def _ser(p) -> dict[str, Any]:
+        return {
+            "account_id":            p.account_id,
+            "provider":              p.provider,
+            "window_name":           p.window_name,
+            "current_pct":           p.current_pct,
+            "trend":                 p.trend,
+            "velocity_pph":          p.velocity_pph,
+            "exhausted_at":          p.exhausted_at.isoformat() if p.exhausted_at else None,
+            "reset_at":              p.reset_at.isoformat() if p.reset_at else None,
+            "hours_until_exhausted": p.hours_until_exhausted,
+            "hours_until_reset":     p.hours_until_reset,
+            "recommended":           p.recommended,
+            "recommendation_reason": p.recommendation_reason,
+            "risk_level":            p.risk_level,
+            "warning":               p.warning,
+        }
+
+    return {
+        "best_account_id":   result.best_account_id,
+        "best_account_name": result.best_account_name,
+        "reason":            result.reason,
+        "generated_at":      result.generated_at,
+        "predictions":       [_ser(p) for p in result.predictions],
+    }

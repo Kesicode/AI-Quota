@@ -39,6 +39,7 @@
       <button class="tab-btn active" data-tab="accounts" role="tab" aria-selected="true">Accounts</button>
       <button class="tab-btn" data-tab="providers" role="tab" aria-selected="false">Providers</button>
       <button class="tab-btn" data-tab="history" role="tab" aria-selected="false">History</button>
+      <button class="tab-btn" data-tab="predictions" role="tab" aria-selected="false">Predictions</button>
       <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false">Settings</button>
       <button class="tab-btn" data-tab="diagnostics" role="tab" aria-selected="false">Diagnostics</button>
     </nav>
@@ -176,6 +177,24 @@
         </div>
         <div id="diagnostics-body" class="diagnostics-body">
           <div class="loading-row">Loading diagnostics…</div>
+        </div>
+      </section>
+    </div>
+
+    </div>
+
+    <!-- ── Predictions tab ── -->
+    <div id="tab-predictions" class="tab-panel" role="tabpanel" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Quota Predictions</h2>
+            <p>Velocity-based forecasting — consumption rate, exhaustion ETA, reset timing, risk levels, and account recommendation.</p>
+          </div>
+          <button id="refreshPredictions" class="button">Refresh</button>
+        </div>
+        <div id="predictions-body">
+          <div class="loading-row">Loading predictions…</div>
         </div>
       </section>
     </div>

@@ -837,6 +837,7 @@
         if (tab === 'history') loadHistory();
         if (tab === 'settings') loadSettings();
         if (tab === 'diagnostics') loadDiagnostics();
+        if (tab === 'predictions') loadPredictions();
       });
     });
   }
@@ -1050,3 +1051,71 @@
     });
   });
 })();
+
+  // ── Predictions tab ───────────────────────────────────────────────────────
+  async function loadPredictions() {
+    const container = $('#tab-predictions');
+    if (!container) return;
+    container.innerHTML = '<p class="loading-text">Loading predictions…</p>';
+    try {
+      const data = await apiFetch('/api/v1/predictions?period=24h');
+      const preds = data.predictions || [];
+
+      const riskColor = { none: '#4fa84f', low: '#4fa84f', medium: '#f5a623', high: '#e74c3c', critical: '#e74c3c' };
+      const trendIcon = { stable: '━', consuming: '↘', recovering: '↗', exhausted: '✗', unknown: '?' };
+
+      let html = `
+        <div class="pred-header">
+          <h2>Quota Predictions</h2>
+          <button class="btn-secondary" id="refreshPredictions">↻ Refresh</button>
+        </div>`;
+
+      if (data.best_account_id) {
+        html += `<div class="pred-recommendation">
+          <span class="pred-rec-label">Recommended Account</span>
+          <span class="pred-rec-name">Account ${data.best_account_id}</span>
+          <span class="pred-rec-reason">${data.reason}</span>
+        </div>`;
+      }
+
+      if (!preds.length) {
+        html += '<p class="empty-state">No snapshot data yet. Add accounts and sync to see predictions.</p>';
+      } else {
+        html += '<div class="pred-grid">';
+        for (const p of preds) {
+          const risk  = p.risk_level || 'unknown';
+          const color = riskColor[risk] || '#888';
+          const icon  = trendIcon[p.trend] || '?';
+          const pct   = p.current_pct != null ? `${p.current_pct.toFixed(1)}%` : '—';
+          const exh   = p.hours_until_exhausted != null ? `~${p.hours_until_exhausted.toFixed(1)}h` : '—';
+          const rst   = p.hours_until_reset     != null ? `~${p.hours_until_reset.toFixed(1)}h`     : '—';
+          const vel   = p.velocity_pph != null  ? `${p.velocity_pph > 0 ? '+' : ''}${p.velocity_pph.toFixed(2)}%/h` : '—';
+          const recBadge = p.recommended ? '<span class="pred-rec-badge">✓ Recommended</span>' : '';
+
+          html += `
+            <div class="pred-card ${p.recommended ? 'pred-card--best' : ''}" style="border-top: 3px solid ${color}">
+              <div class="pred-card-header">
+                <span class="pred-provider">${p.provider || 'Unknown'}</span>
+                ${recBadge}
+              </div>
+              <div class="pred-pct" style="color:${color}">${pct}</div>
+              <div class="pred-trend">${icon} ${p.trend}</div>
+              <div class="pred-stats">
+                <span title="Consumption velocity">⚡ ${vel}</span>
+                <span title="Exhausted in">💀 ${exh}</span>
+                <span title="Reset in">🔄 ${rst}</span>
+              </div>
+              ${p.warning ? `<div class="pred-warning">⚠ ${p.warning}</div>` : ''}
+              <div class="pred-risk" style="color:${color}">Risk: ${risk.toUpperCase()}</div>
+            </div>`;
+        }
+        html += '</div>';
+      }
+
+      html += `<p class="pred-generated">Generated: ${data.generated_at ? new Date(data.generated_at).toLocaleTimeString() : '—'}</p>`;
+      container.innerHTML = html;
+      $('#refreshPredictions')?.addEventListener('click', loadPredictions);
+    } catch (err) {
+      $('#tab-predictions').innerHTML = `<p class="error-text">Failed to load predictions: ${err.message}</p>`;
+    }
+  }
