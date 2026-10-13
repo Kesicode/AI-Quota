@@ -73,19 +73,28 @@ def run_migrations(conn: sqlite3.Connection) -> dict[str, object]:
     Apply all schema migrations to an open connection.
     Safe to call on every startup — fully idempotent.
     Returns a summary dict for diagnostics.
-    """
-    # 1. Apply base schema (CREATE IF NOT EXISTS)
-    conn.executescript(SCHEMA_V1)
-    conn.executescript(INDICES)
 
-    # 2. Apply migration columns (idempotent ADD COLUMN)
+    Order matters:
+      1. Base schema — CREATE TABLE IF NOT EXISTS (no indices yet)
+      2. Idempotent column additions — ensures every column exists before indexing
+      3. Indices — CREATE INDEX IF NOT EXISTS (columns are guaranteed to exist now)
+      4. Backfill account_id for legacy rows
+      5. Seed default settings
+    """
+    # 1. Base tables (no indices — columns may not exist yet on legacy DBs)
+    conn.executescript(SCHEMA_V1)
+
+    # 2. Idempotent ADD COLUMN — must run before indices that reference new columns
     for table, column, definition in MIGRATION_COLUMNS:
         _add_column(conn, table, column, definition)
 
-    # 3. Backfill account_id for legacy rows
+    # 3. Indices — all referenced columns now guaranteed to exist
+    conn.executescript(INDICES)
+
+    # 4. Backfill account_id for legacy rows
     backfilled = _backfill_account_ids(conn)
 
-    # 4. Seed default settings
+    # 5. Seed default settings
     _seed_default_settings(conn)
 
     conn.commit()
