@@ -753,7 +753,84 @@
     $('#sync')?.addEventListener('click', syncNow);
     $('#enableAntigravity')?.addEventListener('click', enableGlobalCollector);
     $('#addAccount')?.addEventListener('click', () => openModal('accountDialog'));
-    $('#closeDetail')?.addEventListener('click', () => closeModal('detailDialog'));
+  
+  // ── Phase 22 — Detail dialog label/notes editor ──────────────────────────
+  let _detailAccountId = null;
+
+  function openDetailWithLabelEditor(acc) {
+    _detailAccountId = acc.id;
+
+    // Populate header
+    const nameEl = $('#detailName');
+    const metaEl = $('#detailMeta');
+    if (nameEl) nameEl.textContent = acc.label || acc.display_name || acc.email || `Account ${acc.id}`;
+    if (metaEl) metaEl.textContent = `${acc.provider} · ${acc.client} · ${acc.status}`;
+
+    // Populate snapshot grid (reuse existing detailBody render)
+    renderDetailBody(acc);
+
+    // Populate label editor fields
+    const setVal = (id, val) => { const el = $(id); if (el) el.value = val ?? ''; };
+    setVal('#detailLabel',    acc.label     || '');
+    setVal('#detailGroup',    acc.group_name || '');
+    setVal('#detailColorHex', acc.color     || '#1a9e5c');
+    setVal('#detailNotes',    acc.notes     || '');
+    const prio = $('#detailPriority');
+    if (prio) prio.value = acc.priority ?? 50;
+    const colPicker = $('#detailColor');
+    if (colPicker) colPicker.value = acc.color || '#1a9e5c';
+    const statusEl = $('#detailLabelStatus');
+    if (statusEl) statusEl.textContent = '';
+
+    document.getElementById('detailDialog')?.showModal();
+  }
+
+  // Sync color picker ↔ hex input
+  $('#detailColor')?.addEventListener('input', () => {
+    const hex = $('#detailColorHex');
+    if (hex) hex.value = $('#detailColor').value;
+  });
+  $('#detailColorHex')?.addEventListener('input', () => {
+    const v = $('#detailColorHex').value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+      const p = $('#detailColor');
+      if (p) p.value = v;
+    }
+  });
+
+  // Save label button
+  $('#saveDetailLabel')?.addEventListener('click', async () => {
+    if (!_detailAccountId) return;
+    const statusEl = $('#detailLabelStatus');
+    const btn = $('#saveDetailLabel');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    const body = {
+      label:      $('#detailLabel')?.value.trim()    || null,
+      group_name: $('#detailGroup')?.value.trim()    || null,
+      color:      $('#detailColorHex')?.value.trim() || null,
+      notes:      $('#detailNotes')?.value.trim()    || null,
+      priority:   parseInt($('#detailPriority')?.value ?? '50', 10),
+    };
+    // Remove null keys
+    Object.keys(body).forEach(k => { if (body[k] === null || body[k] === '') delete body[k]; });
+
+    try {
+      await apiFetch(`/api/v1/accounts/${_detailAccountId}/label`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = '#4fa84f'; }
+      loadAccounts(); // refresh accounts list in background
+    } catch (e) {
+      if (statusEl) { statusEl.textContent = `✗ ${e.message}`; statusEl.style.color = '#e53935'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save label'; }
+    }
+  });
+
+  $('#closeDetail')?.addEventListener('click', () => closeModal('detailDialog'));
 
     $('#confirmDelete')?.addEventListener('click', (e) => {
       e.preventDefault();

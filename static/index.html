@@ -246,8 +246,50 @@
   <!-- Account detail dialog -->
   <dialog id="detailDialog">
     <div class="detail-dialog">
-      <div class="detail-head"><div><div id="detailName" class="detail-name">Account</div><div id="detailMeta" class="detail-meta"></div></div><button id="closeDetail" class="button">Close</button></div>
+      <div class="detail-head">
+        <div>
+          <div id="detailName" class="detail-name">Account</div>
+          <div id="detailMeta" class="detail-meta"></div>
+        </div>
+        <button id="closeDetail" class="button">Close</button>
+      </div>
+
+      <!-- Read-only snapshot grid -->
       <div id="detailBody"></div>
+
+      <!-- ── Label / Notes Editor (Phase 22) ── -->
+      <div class="label-editor-section">
+        <h3 class="label-editor-heading">Label &amp; Notes</h3>
+        <div class="label-editor-grid">
+          <label class="lbl-field">
+            <span>Label</span>
+            <input id="detailLabel" type="text" maxlength="80" placeholder="e.g. Work, Personal, Project X" class="settings-input">
+          </label>
+          <label class="lbl-field">
+            <span>Group</span>
+            <input id="detailGroup" type="text" maxlength="80" placeholder="e.g. Production, Dev" class="settings-input">
+          </label>
+          <label class="lbl-field">
+            <span>Color tag</span>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <input id="detailColor" type="color" value="#1a9e5c" style="width:38px;height:32px;border:none;background:none;cursor:pointer;padding:0">
+              <input id="detailColorHex" type="text" maxlength="7" placeholder="#1a9e5c" class="settings-input" style="flex:1">
+            </div>
+          </label>
+          <label class="lbl-field" style="grid-column:1/-1">
+            <span>Priority <small style="color:var(--muted)">(0 = highest)</small></span>
+            <input id="detailPriority" type="number" min="0" max="999" value="50" class="settings-input" style="width:100px">
+          </label>
+          <label class="lbl-field" style="grid-column:1/-1">
+            <span>Notes</span>
+            <textarea id="detailNotes" rows="3" maxlength="1000" placeholder="Any notes about this account…" class="settings-input" style="resize:vertical;font-size:.83rem"></textarea>
+          </label>
+        </div>
+        <div class="label-editor-actions">
+          <span id="detailLabelStatus" class="detail-label-status"></span>
+          <button id="saveDetailLabel" class="button primary" style="min-width:110px">Save label</button>
+        </div>
+      </div>
     </div>
   </dialog>
 

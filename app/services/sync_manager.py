@@ -6,11 +6,40 @@ from ..utils.logging import get_logger
 logger = get_logger("ai_quota.sync")
 
 
+def _fire_webhooks_background(changed: int) -> None:
+    """
+    Fire webhook quota alerts after a successful sync.
+    Runs in a background thread — never blocks the sync response.
+    Only fires when at least one quota value changed during the sync.
+    """
+    if changed <= 0:
+        return
+    try:
+        from app.routes.v1 import fire_quota_alerts
+        result = fire_quota_alerts()
+        if result.get("fired", 0) > 0:
+            logger.info(
+                "Webhook alerts fired after sync: %d account(s) below threshold",
+                result["fired"],
+            )
+        errors = result.get("errors", [])
+        if errors:
+            logger.warning("Webhook fire errors: %s", errors)
+    except Exception as exc:
+        # Never let webhook failure crash or delay the sync cycle
+        logger.error("Webhook auto-fire failed (non-fatal): %s", exc)
+
+
 def sync_all() -> dict[str, Any]:
     """
     Execute isolated, fault-tolerant synchronization across all provider adapters.
     A failure in any one adapter will never block or crash the others.
+
+    After sync completes, fires webhook low-quota alerts in a background thread
+    when at least one account's quota value changed. Webhook failure is always
+    non-fatal and never delays the sync response.
     """
+    import threading
     from ..providers import get_all_adapters
 
     logger.info("Starting provider synchronization run...")
@@ -53,4 +82,14 @@ def sync_all() -> dict[str, Any]:
         total_matched,
         total_discovered,
     )
+
+    # Phase 21 — Auto-fire webhook alerts in background after sync
+    t = threading.Thread(
+        target=_fire_webhooks_background,
+        args=(total_changed,),
+        daemon=True,
+        name="webhook-auto-fire",
+    )
+    t.start()
+
     return summary
