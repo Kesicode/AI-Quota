@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="apps/vscode-extension/media/icon.png" alt="AI-Quota Logo" width="96" height="96" />
+<img src="static/favicon.png" alt="AI-Quota Logo" width="96" height="96" />
 
 # AI-Quota
 
