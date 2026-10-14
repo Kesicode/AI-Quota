@@ -4,75 +4,168 @@
 
 # AI-Quota
 
-**Universal AI Account & Quota Manager**
+**Universal AI Account & Quota Manager for VS Code, Google Antigravity IDE, Cursor & Web**
 
-Monitor, manage, and switch between multiple AI accounts — all from a single local-first dashboard and IDE extension.
+Manage, monitor, predict, and switch multiple AI accounts across Google Antigravity, Gemini API, GitHub Copilot, OpenAI Codex, and Google Cloud — from a dedicated IDE extension and local-first dashboard.
 
 [![Tests](https://img.shields.io/badge/tests-59%2F59%20passing-brightgreen?style=flat-square&logo=pytest)](tests/)
 [![Extension](https://img.shields.io/badge/extension-v2.0.0-blue?style=flat-square&logo=visual-studio-code)](apps/vscode-extension/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python)](https://python.org)
-[![Security](https://img.shields.io/badge/security-local--only-orange?style=flat-square)](#security)
+[![Security](https://img.shields.io/badge/security-local--only-orange?style=flat-square)](#security--privacy)
 
-[**Quick Start**](#quick-start) · [**Install Extension**](#ide-extension) · [**API Reference**](#api-reference) · [**Architecture**](#architecture) · [**Security**](#security)
+[**Overview**](#overview) · [**Compatibility**](#compatibility) · [**Features**](#features) · [**Commands**](#commands) · [**Configuration**](#configuration) · [**Installation**](#installation) · [**API Reference**](#api-reference) · [**Security**](#security--privacy)
 
 </div>
 
 ---
 
-## What Is AI-Quota?
+<a id="overview"></a>
+## Overview
 
-AI-Quota is a **local-first agent** that runs on your machine and gives you a single control panel for all your AI provider accounts — Antigravity, Google Cloud Code, Gemini API, GitHub Copilot, OpenAI Codex, and more.
+**AI-Quota** makes it effortless to work across multiple AI accounts without having to manually log out, repeat browser authentication, or run into surprise rate limits in the middle of a coding session.
 
-No cloud sync. No telemetry. No secrets ever leave your device.
+It provides a unified, local-first engine (`127.0.0.1:8765`) combined with a native IDE sidebar view and status bar integration to:
+- Track active quotas across all models and windows (5-hour, weekly, monthly, and context windows).
+- View precise live countdown timers until quota buckets reset.
+- Predict exhaustion time with a velocity forecasting engine.
+- Instantly switch between saved accounts with safe capability checks and verification.
+- Receive webhook and desktop notifications when any quota falls below your safety threshold.
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Browser Dashboard  ·  VS Code  ·  Antigravity IDE  │
-│         ↓                ↓               ↓          │
-│          AI-Quota Agent  (127.0.0.1:8765)           │
-│         ↓                ↓               ↓          │
-│  Antigravity  ·  Gemini  ·  Copilot  ·  Codex  ...  │
-└─────────────────────────────────────────────────────┘
+---
+
+<a id="compatibility"></a>
+## Compatibility
+
+- **Supported Editors**: Visual Studio Code (1.85.0+), Google Antigravity Standalone IDE, Cursor, VSCodium, and other VS Code-compatible forks.
+- **Provider Adapters**:
+  - **Google Antigravity & Antigravity CLI** (Hub process auto-discovery, 5h + weekly buckets, instant credential swapping)
+  - **Gemini API** (Free & Pay-as-you-go tier quotas)
+  - **Google Cloud Code & Cloud Shell**
+  - **GitHub Copilot**
+  - **OpenAI / Codex**
+- **Operating Systems**: Windows (with native Credential Manager / DPAPI Token Vault), macOS (Keychain), and Linux (Secret Service).
+
+---
+
+<a id="features"></a>
+## Features
+
+### 🔄 Account Management & Safe Switching
+- **Saved Accounts**: Store multiple AI provider accounts with custom labels, group categories (*Work*, *Personal*, *Dev*, *Production*), color tags, and priority ordering.
+- **Instant Token Vault (Windows)**: Swaps credentials locally via Windows Credential Manager / DPAPI, switching sessions without opening browser login windows every time.
+- **Verified Switching**: Strict verification protocol ensures `activeAccount == requestedAccount` before reporting success.
+- **Active Account Protection**: Protects against accidental deletion of the active account while signed in.
+
+### 📊 Quota Tracking, Matrix & Alerts
+- **Real-Time Usage**: Live progress bars and percentages across 5-hour, daily, and weekly limits with model-specific precision.
+- **Reset Timers**: Shows exact countdowns (`↺ 1h 42m`) until quota windows refresh.
+- **Quota Matrix**: Side-by-side comparison grid (`GET /api/v1/matrix` & IDE Webview) displaying all accounts × all windows simultaneously with color-coded health indicators.
+- **Velocity Prediction Engine**: Predicts quota consumption rate, calculates exact exhaustion ETA, and highlights the best account to use.
+- **Low-Quota Alerts & Webhooks**: Desktop notifications and automated background webhooks (Slack, Discord, custom HTTP) whenever quota drops below your configured threshold (default 20%).
+- **History & CSV Export**: Detailed time-series analytics with one-click CSV and JSON data export.
+
+### 💻 Editor Integration & Status Bar
+- **Sidebar Panel**: Live status dot (🟢 live, 🟡 stale, ⚪ offline), prediction chips, account recommendation banner, and inline label/note editor.
+- **Status Bar Indicator**: Real-time quota readout (`AI-Quota 84% · 1h42m`) with dynamic warning colors (≤20% warning, ≤10% critical).
+- **Zero Window Reloads**: Signals IDE backend components without needing a complete editor reload.
+
+### 🌐 Proxy & Network Control
+- **Localhost Guaranteed Bypass**: Internal communication with local Language Servers and Hubs (`127.0.0.1`) strictly bypasses proxy chains.
+- **Proxy Support**: Configurable direct, system default, or custom manual HTTP/SOCKS5 proxy paths.
+- **SSL Verification Toggle**: Configurable strict SSL for enterprise or custom inspection environments.
+
+---
+
+<a id="commands"></a>
+## Commands
+
+All commands are accessible from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
+
+| Command | Shortcut | Description |
+|---|---|---|
+| `AI-Quota: Open Dashboard` | — | Opens the full browser-based dashboard (`http://127.0.0.1:8765`) |
+| `AI-Quota: Switch Account` | `Alt+A` | Quick-pick account switcher sorted by highest remaining quota |
+| `AI-Quota: Show Quota Matrix` | — | Opens full-screen cross-provider comparison matrix webview |
+| `AI-Quota: Sync Quota Data` | `Alt+Shift+A` | Manually triggers provider sync and updates telemetry |
+| `AI-Quota: Show Status` | — | Displays current active account and quota breakdown notification |
+| `AI-Quota: Save Current Account` | — | Registers and stores an account into the local registry |
+| `AI-Quota: Show Diagnostics` | — | Inspects agent health, SQLite database info, and provider status |
+| `AI-Quota: Sign In / Re-authenticate` | — | Opens authentication flow for new provider credentials |
+| `AI-Quota: Sign Out` | — | Safely detaches account session from local registry |
+
+---
+
+<a id="configuration"></a>
+## Configuration
+
+Customize behavior directly in your editor's `settings.json`:
+
+```json
+{
+  // Show quota indicator in the editor status bar
+  "aiQuota.showStatusBarItem": true,
+
+  // Status bar format: "compact" (84% · 1h42m) or "percentageOnly" (84%)
+  "aiQuota.statusBarFormat": "compact",
+
+  // Auto-refresh quota polling interval in seconds
+  "aiQuota.refreshIntervalSeconds": 60,
+
+  // Low quota warning notification reminder
+  "aiQuota.enableLowQuotaReminder": true,
+
+  // Low quota warning threshold percentage
+  "aiQuota.lowQuotaThresholdPercent": 20,
+
+  // Webhook alert trigger URL for remote notifications
+  "aiQuota.webhookUrl": "",
+
+  // Enable instant credential switching without browser prompts
+  "aiQuota.enableInstantSwitch": true
+}
 ```
 
 ---
 
-## ✨ Features
+<a id="installation"></a>
+## Installation
 
-### 🖥️ Web Dashboard — 7 Tabs
+### 1. From VSIX Package
 
-| Tab | What it does |
-|-----|-------------|
-| **Accounts** | Live quota cards — status dot, bar chart, reset timer, switch button |
-| **Providers** | Adapter health, detection status, capabilities per provider |
-| **History** | Time-series quota history with CSV export |
-| **Predictions** | Velocity-based exhaustion ETA, risk level, recommended account |
-| **Matrix** | Cross-account × cross-window quota grid with color-coded bars |
-| **Settings** | Webhook alerts, auto-sync interval, notification threshold |
-| **Diagnostics** | DB info, provider health, agent version |
+Download the latest `ai-quota-2.0.0.vsix` from [**GitHub Releases**](https://github.com/Kesicode/AI-Quota/releases/latest).
 
-### 🔌 IDE Extension (VS Code · Antigravity · Cursor · VSCodium)
+#### Install via IDE GUI:
+1. Open the Extensions view (`Ctrl+Shift+X` or `Cmd+Shift+X`).
+2. Click the `···` menu at the top-right of the Extensions view.
+3. Select **Install from VSIX...** and select `ai-quota-2.0.0.vsix`.
 
-- **Activity Bar sidebar** with live status dot, prediction chips, inline label editor
-- **Status bar** showing `AI-Quota 84% · 1h 42m` — color-coded by urgency
-- **Command palette** with 11 commands: Switch Account, Quota Matrix, Sync, Diagnostics…
-- **Quota Matrix webview** — rich dark panel with provider chip filters and live refresh
-- **Low-quota notifications** with configurable threshold
+#### Install via CLI:
+```bash
+# Google Antigravity IDE
+antigravity --install-extension ai-quota-2.0.0.vsix
 
-### ⚙️ Core Engine
+# Visual Studio Code
+code --install-extension ai-quota-2.0.0.vsix
 
-- **Multi-provider sync** — Antigravity Hub, Antigravity CLI, Cloud Code, Gemini API, GitHub Copilot, OpenAI Codex, Google Cloud
-- **Prediction engine** — velocity-based: consumed rate → exhaustion ETA → reset timing
-- **Account switching** — instant (credential swap) with post-switch verification
-- **Webhook alerts** — auto-fires after every sync when quota drops below threshold
-- **OS-native credential vault** — Windows Credential Manager / macOS Keychain / Secret Service
-- **Provider truth separation** — quota values never mixed across providers
+# Cursor
+cursor --install-extension ai-quota-2.0.0.vsix
+
+# VSCodium
+codium --install-extension ai-quota-2.0.0.vsix
+```
+
+#### One-Click Windows Script:
+```bat
+scripts\install_extension.bat
+```
 
 ---
 
 <a id="quick-start"></a>
-## 🚀 Quick Start
+## Quick Start (Local Backend)
+
+The IDE extension connects seamlessly to the local AI-Quota engine:
 
 ### Windows
 ```bat
@@ -84,117 +177,32 @@ run.bat
 chmod +x run.sh && ./run.sh
 ```
 
-### Manual
-```bash
-python -m venv .venv
-source .venv/bin/activate      # macOS/Linux
-.venv\Scripts\activate         # Windows
-
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 --reload
-```
-
-Then open **[http://127.0.0.1:8765](http://127.0.0.1:8765)**
-
----
-
-<a id="ide-extension"></a>
-## 🔌 IDE Extension
-
-### Install from Release (Recommended)
-
-Download `ai-quota-2.0.0.vsix` from the [**latest release**](https://github.com/Kesicode/AI-Quota/releases/latest), then:
-
-```bash
-# Antigravity IDE
-antigravity --install-extension ai-quota-2.0.0.vsix
-
-# VS Code
-code --install-extension ai-quota-2.0.0.vsix
-
-# Cursor
-cursor --install-extension ai-quota-2.0.0.vsix
-
-# VSCodium
-codium --install-extension ai-quota-2.0.0.vsix
-```
-
-Or via IDE UI: **Extensions** (`Ctrl+Shift+X`) → `···` menu → **Install from VSIX…**
-
-### Install via Script (Windows)
-```bat
-scripts\install_extension.bat
-```
-
-### Build from Source
-```bash
-cd apps/vscode-extension
-npm install
-npm run build      # production bundle → dist/extension.js
-npm run package    # create .vsix
-```
-
-### Make It Searchable In-IDE
-
-To appear in the built-in extension search of **Antigravity IDE** and **VS Code**, publish to the registries:
-
-| IDE | Registry | Setup Guide |
-|-----|---------|-------------|
-| Antigravity · Cursor · VSCodium | [Open VSX](https://open-vsx.org) | Add `OVSX_PAT` secret → auto-publishes on release |
-| VS Code (official) | [VS Marketplace](https://marketplace.visualstudio.com) | Add `VSCE_PAT` secret → auto-publishes on release |
-
-See [**docs/MARKETPLACE_PUBLISHING.md**](docs/MARKETPLACE_PUBLISHING.md) for the full step-by-step.
+- **Dashboard**: [http://127.0.0.1:8765](http://127.0.0.1:8765)
+- **API Documentation**: [http://127.0.0.1:8765/api/docs](http://127.0.0.1:8765/api/docs)
 
 ---
 
 <a id="api-reference"></a>
 ## 📡 API Reference
 
-Base URL: `http://127.0.0.1:8765`  
-Interactive docs: [http://127.0.0.1:8765/api/docs](http://127.0.0.1:8765/api/docs)
-
-### Core
+Base URL: `http://127.0.0.1:8765` · OpenAPI Docs: `/api/docs`
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/health` | Agent health, version, uptime |
-| `GET` | `/api/v1/accounts` | All accounts with live quota |
-| `POST` | `/api/v1/accounts` | Register account |
-| `DELETE` | `/api/v1/accounts/{id}` | Remove account |
-| `POST` | `/api/v1/accounts/{id}/switch` | Switch to account (verified) |
-| `PATCH` | `/api/v1/accounts/{id}/label` | Update label, group, color, notes, priority |
-| `GET` | `/api/v1/accounts/{id}/notes` | Get account notes |
-
-### Data & Analytics
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/quota` | All quotas across accounts |
-| `GET` | `/api/v1/matrix` | Cross-account × cross-window quota grid |
-| `GET` | `/api/v1/predictions` | Velocity forecasts + recommendation |
-| `GET` | `/api/v1/history` | Quota history (filterable by account, period) |
-| `GET` | `/api/v1/analytics` | Aggregated usage analytics |
-| `GET` | `/api/v1/events` | Recent events log |
-| `GET` | `/api/v1/events/stream` | SSE real-time event stream |
-
-### Providers & System
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/providers` | All adapters + capabilities + health |
-| `POST` | `/api/v1/sync` | Full provider sync |
-| `GET` | `/api/v1/diagnostics` | DB info, provider status, agent version |
-| `GET` | `/api/v1/settings` | Current settings |
-| `PUT` | `/api/v1/settings` | Update settings |
-
-### Webhooks
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/webhooks/config` | Get webhook configuration |
-| `PUT` | `/api/v1/webhooks/config` | Update URL, threshold, enabled flag |
-| `POST` | `/api/v1/webhooks/test` | Test webhook delivery |
-| `POST` | `/api/v1/webhooks/fire` | Manually fire quota alerts |
+|---|---|---|
+| `GET` | `/api/v1/health` | Service health, engine version, and uptime |
+| `GET` | `/api/v1/accounts` | All registered accounts with quota breakdown |
+| `POST` | `/api/v1/accounts` | Register a new account / project identity |
+| `DELETE` | `/api/v1/accounts/{id}` | Remove account and stored history |
+| `POST` | `/api/v1/accounts/{id}/switch` | Execute verified account switch |
+| `PATCH` | `/api/v1/accounts/{id}/label` | Update label, color tag, group, notes, and priority |
+| `GET` | `/api/v1/matrix` | Universal cross-account × cross-window quota grid |
+| `GET` | `/api/v1/predictions` | Velocity-based forecasts, ETA to exhaustion, and best-account pick |
+| `GET` | `/api/v1/history` | Historical quota time-series (CSV or JSON export) |
+| `GET` | `/api/v1/providers` | Provider adapter status, capabilities, and telemetry health |
+| `POST` | `/api/v1/sync` | Trigger isolated, fault-tolerant sync across all adapters |
+| `GET` | `/api/v1/webhooks/config` | Retrieve webhook alert parameters |
+| `PUT` | `/api/v1/webhooks/config` | Update webhook target URL and quota threshold |
+| `POST` | `/api/v1/webhooks/fire` | Evaluate and trigger quota threshold alerts |
 
 ---
 
@@ -204,98 +212,80 @@ Interactive docs: [http://127.0.0.1:8765/api/docs](http://127.0.0.1:8765/api/doc
 ```
 AI-Quota/
 ├── app/
-│   ├── main.py                  # FastAPI app + lifespan
+│   ├── main.py                  # FastAPI app with lifespan manager
 │   ├── routes/
-│   │   └── v1.py                # All v1 REST + SSE endpoints
+│   │   └── v1.py                # REST & SSE streaming endpoints
 │   ├── services/
-│   │   ├── account_service.py   # Account CRUD
-│   │   ├── sync_manager.py      # Provider sync + webhook auto-fire
-│   │   └── prediction_engine.py # Velocity-based forecasting (via packages/)
+│   │   ├── account_service.py   # Account lifecycle & state management
+│   │   ├── sync_manager.py      # Background provider sync & webhook auto-fire
+│   │   └── prediction_engine.py # Quota velocity & exhaustion forecasting
 │   └── providers/               # Provider adapter implementations
-│       ├── antigravity/         # Hub detection, instant switch
-│       ├── antigravity_cli/     # CLI-based quota reading
-│       ├── cloud_code/          # Google Cloud Code
-│       ├── gemini/              # Gemini API
-│       ├── codex/               # OpenAI Codex
-│       ├── copilot/             # GitHub Copilot
-│       └── google_cloud/        # Google Cloud quotas
+│       ├── antigravity/         # Hub detection & instant DPAPI credential switch
+│       ├── antigravity_cli/     # CLI-level session quota extraction
+│       ├── cloud_code/          # Google Cloud Code adapter
+│       ├── gemini/              # Google Gemini API adapter
+│       ├── codex/               # OpenAI Codex adapter
+│       ├── copilot/             # GitHub Copilot adapter
+│       └── google_cloud/        # Google Cloud IAM / project quota adapter
 │
 ├── packages/
-│   ├── core/                    # Switch engine, models, prediction engine
-│   ├── database/                # SQLite WAL schema, migrations
-│   └── security/                # OS-native credential vault
+│   ├── core/                    # Switch engine, models, and prediction algorithms
+│   ├── database/                # SQLite WAL schema, migrations, and event store
+│   └── security/                # OS-native credential vault (DPAPI / Keychain)
 │
-├── static/                      # Web dashboard (Vanilla JS + CSS)
-│   ├── index.html               # 7-tab SPA shell
-│   ├── app.js                   # All tab logic, matrix, label editor
-│   └── dashboard.css            # Design system (Obsidian dark + emerald)
+├── static/                      # Web dashboard (Obsidian Dark + Emerald design)
+│   ├── index.html               # 7-tab SPA interface
+│   ├── app.js                   # Client state, quota matrix, and label modal
+│   └── dashboard.css            # Responsive dark theme
 │
 ├── apps/vscode-extension/       # VS Code / Antigravity IDE extension
-│   ├── src/
-│   │   ├── extension.ts         # Entry point
-│   │   ├── agent_client.ts      # HTTP client + TypeScript interfaces
-│   │   ├── commands.ts          # 11 commands + Matrix webview
-│   │   ├── status_bar.ts        # Quota status bar item
-│   │   └── sidebar/             # Sidebar tree + webview providers
+│   ├── src/                     # TypeScript extension source
 │   └── dist/extension.js        # Production bundle (40.9 KB)
 │
-├── tests/                       # 59 tests across 5 test files
-├── scripts/                     # Package + install scripts
-└── docs/                        # Security policy, marketplace guide
+├── tests/                       # Complete pytest suite (59/59 passing)
+├── scripts/                     # Packaging (.vsix) & auto-installation scripts
+└── docs/                        # Security policies and Marketplace publishing guides
 ```
 
 ---
 
-<a id="security"></a>
-## 🔒 Security
+<a id="security--privacy"></a>
+## 🔒 Security & Privacy
 
-AI-Quota is built on a strict **Zero Remote Secret Storage** policy:
+AI-Quota is engineered under a strict **Zero Remote Secret Storage Policy**:
 
-- **Local-only binding** — always `127.0.0.1`, never `0.0.0.0` unless explicitly configured
-- **No credentials in the database** — only opaque `credential_reference` keys; real secrets live in the OS vault
-- **No telemetry** — no analytics, no usage tracking, no external HTTP calls except your configured webhooks
-- **Switch verification** — a switch is never reported as successful without confirming `activeAccount == requestedAccount`
-- **Auto-switch OFF by default** — never switches accounts without explicit user action
+- **Local-Only Storage**: Account tokens and credentials stay on your machine in the OS-backed Secret Storage (Windows Credential Manager / DPAPI, macOS Keychain, Linux Secret Service).
+- **Never in SQLite**: Passwords, OAuth tokens, and API keys are **never** stored in plaintext inside the database; only opaque `credential_reference` keys are kept locally.
+- **Strict 127.0.0.1 Binding**: The daemon binds exclusively to localhost (`127.0.0.1`). It never listens on `0.0.0.0` unless explicitly commanded.
+- **No Telemetry / No Remote Transmission**: Your usage metrics and credentials are never transmitted to third parties or cloud servers.
+- **Target Scoping**: Specifically scoped to local IDE processes and official credentials without touching unrelated system entries.
 
-See [**SECURITY.md**](SECURITY.md) for the complete policy.
+See [**SECURITY.md**](SECURITY.md) for full audit details.
 
 ---
 
 <a id="development"></a>
-## 🛠️ Development
+## Development
 
-### Run Tests
 ```bash
+# Run backend test suite (59 unit & integration tests)
 python -m pytest tests/ -v
+
+# Install extension dependencies
+cd apps/vscode-extension
+npm install
+
+# Compile TypeScript and bundle with esbuild
+npm run build
+
+# Package production VSIX
+npx @vscode/vsce package --no-dependencies
 ```
-
-### Add a Provider
-
-Implement `ProviderAdapter` from `packages/core/provider_adapter.py`:
-
-```python
-class MyProviderAdapter(ProviderAdapter):
-    @property
-    def id(self): return "my_provider"
-
-    @property
-    def display_name(self): return "My Provider"
-
-    @property
-    def supported_clients(self): return ["my-client"]
-
-    def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(supports_quota=True, supports_switch=False)
-
-    def sync(self) -> dict:
-        # Discover accounts, record snapshots, return summary dict
-        ...
-```
-
-Place in `providers/my_provider/adapter.py` and expose `create_adapter()`. It will be auto-discovered on startup. One provider failure never crashes the others.
 
 ---
 
-## 📄 License
+## License
 
-MIT © [Kesicode](https://github.com/Kesicode)
+- **Author**: [Kesicode](https://github.com/Kesicode)
+- **License**: [MIT License](LICENSE)
+- **Disclaimer**: Not affiliated with or endorsed by Google LLC. Google Antigravity is a trademark of Google LLC.
