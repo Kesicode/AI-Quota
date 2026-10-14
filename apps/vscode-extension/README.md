@@ -1,41 +1,100 @@
-# AI-Quota Extension for VS Code & Antigravity IDE
+<div align="center">
 
-**Universal AI Account & Quota Manager** — Monitor usage, manage accounts, track reset timers, predict quota exhaustion, and switch accounts directly from your IDE.
+<img src="media/icon.png" alt="AI-Quota" width="80" />
 
----
+# AI-Quota
 
-## ✨ Features
+**Universal AI Account & Quota Manager**
 
-- **Activity Bar & Sidebar**: Live status, account cards, prediction indicators, inline label/notes editor.
-- **Status Bar Integration**: Instant overview of your active account and remaining quota.
-- **Account Switching**: Switch between registered accounts with instant capability verification.
-- **Quota Matrix**: Real-time cross-account and cross-window quota grid.
-- **Prediction Engine**: Velocity-based forecasting, exhaustion ETA, reset timing, and account recommendations.
-- **Local-First & Zero-Secret Security**: Local SQLite storage; secrets stay in your OS keyring (never sent to any external server).
+Monitor AI usage, switch accounts, and track quota across every provider — directly inside your IDE.
 
----
+[![Version](https://img.shields.io/badge/version-2.0.0-blue?style=flat-square)](https://github.com/Kesicode/AI-Quota/releases)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.85%2B-blue?style=flat-square&logo=visual-studio-code)](https://code.visualstudio.com)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-## 🚀 Quick Setup
-
-1. Start your local **AI-Quota** service:
-   ```bash
-   python -m uvicorn app.main:app --host 127.0.0.1 --port 8765
-   ```
-2. Open this extension in your IDE — it connects automatically to `http://127.0.0.1:8765`.
-3. Open the **AI-Quota** icon in the Activity Bar to manage accounts and quotas.
+</div>
 
 ---
 
-## 🛠 Commands
+## Requirements
 
-- `AI-Quota: Open Dashboard` — Open the browser web UI
-- `AI-Quota: Switch Account` — Quick-pick account switcher
-- `AI-Quota: Show Quota Matrix` — Open the visual cross-provider quota matrix
-- `AI-Quota: Sync Quota Data` — Manually poll all connected providers
-- `AI-Quota: Show Diagnostics` — Inspect local health and adapter status
+The extension connects to the **AI-Quota local agent** which must be running on your machine.
+
+**Start the agent:**
+```bash
+# Windows
+run.bat
+
+# macOS / Linux
+./run.sh
+```
+
+The agent binds to `http://127.0.0.1:8765`. The extension connects automatically.
 
 ---
 
-## 🔒 Security
+## Installation
 
-AI-Quota operates on a strict **Zero Remote Secret Storage Policy**. All API tokens, cookies, and credentials remain inside local OS credential stores.
+### From GitHub Release
+Download `ai-quota-2.0.0.vsix` from the [latest release](https://github.com/Kesicode/AI-Quota/releases/latest):
+
+```bash
+antigravity --install-extension ai-quota-2.0.0.vsix   # Antigravity IDE
+code        --install-extension ai-quota-2.0.0.vsix   # VS Code
+cursor      --install-extension ai-quota-2.0.0.vsix   # Cursor
+codium      --install-extension ai-quota-2.0.0.vsix   # VSCodium
+```
+
+Or via UI: **Extensions** (`Ctrl+Shift+X`) → `···` → **Install from VSIX…**
+
+---
+
+## Features
+
+### Activity Bar Sidebar
+- **Live status dot** — green (live) / amber (stale) / grey (offline)
+- **Prediction chips** — risk level, trend arrow, velocity, exhaustion ETA
+- **Account cards** — provider badge, best quota %, reset countdown
+- **Inline label editor** — rename, tag, and color-code accounts without leaving the IDE
+- **Recommendation banner** — highlights the best account to switch to
+
+### Status Bar
+Shows your current quota health at a glance:
+
+```
+AI-Quota  84%  ·  1h 42m
+```
+
+Color-coded: 🟢 healthy · 🟡 low · 🔴 critical
+
+### Command Palette (`Ctrl+Shift+P`)
+
+| Command | Description |
+|---------|-------------|
+| `AI-Quota: Open Dashboard` | Open the full browser dashboard |
+| `AI-Quota: Switch Account` | Quick-pick switcher with verification |
+| `AI-Quota: Show Quota Matrix` | Rich cross-provider quota grid panel |
+| `AI-Quota: Sync Quota Data` | Manually trigger a full sync |
+| `AI-Quota: Show Diagnostics` | Inspect agent health and provider status |
+| `AI-Quota: Save Current Account` | Register a new account |
+| `AI-Quota: Show Status` | Quick status summary notification |
+
+### Quota Matrix Panel
+A rich webview panel showing **all accounts × all quota windows**:
+- Color-coded cells: 🟢 ≥ 60% · 🔵 ≥ 30% · 🟡 ≥ 15% · 🔴 < 15%
+- Mini quota bar per cell + reset countdown timer
+- Provider chip filters (All / per-provider)
+- Summary stats: total accounts, live count, avg quota, top account
+- **Live refresh** — re-fetches data from the agent without reopening
+
+---
+
+## Security
+
+All quota data stays on your device. The extension only communicates with `http://127.0.0.1:8765` — your local AI-Quota agent. No credentials, tokens, or usage data are ever sent anywhere else.
+
+---
+
+## Source & Issues
+
+[**github.com/Kesicode/AI-Quota**](https://github.com/Kesicode/AI-Quota) · [Report an issue](https://github.com/Kesicode/AI-Quota/issues)
