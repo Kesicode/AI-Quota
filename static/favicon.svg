@@ -1,36 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
-  <defs>
-    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4ade80"/>
-      <stop offset="60%" stop-color="#22c55e"/>
-      <stop offset="100%" stop-color="#10b981"/>
-    </linearGradient>
-    <filter id="glowBlur" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="9"/>
-    </filter>
-  </defs>
-
   <!-- Obsidian Tile Enclosure -->
-  <rect width="256" height="256" rx="58" fill="#07080b"/>
-  <!-- Precision Double Bezel -->
-  <rect width="254" height="254" x="1" y="1" rx="57" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
-  <rect width="248" height="248" x="4" y="4" rx="54" fill="none" stroke="rgba(255,255,255,0.035)" stroke-width="1"/>
+  <rect width="256" height="256" rx="58" fill="#090a0f"/>
+  <!-- Subtle Hairline Rim -->
+  <rect width="254" height="254" x="1" y="1" rx="57" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
 
-  <!-- Emissive Ambient Aura -->
-  <g filter="url(#glowBlur)">
-    <circle cx="120" cy="116" r="64" fill="none" stroke="#10b981" stroke-width="32" opacity="0.25"/>
-    <line x1="144" y1="140" x2="198" y2="194" stroke="#10b981" stroke-width="32" stroke-linecap="round" opacity="0.25"/>
-  </g>
+  <!-- Inactive Graphite Track (Flat #1f242d) -->
+  <circle cx="120" cy="116" r="64" fill="none" stroke="#1f242d" stroke-width="22.5"/>
 
-  <!-- Inactive Graphite Track -->
-  <circle cx="120" cy="116" r="64" fill="none" stroke="#222730" stroke-width="22.5"/>
-
-  <!-- Active Quota Arc -->
-  <path d="M 71 157.1 A 64 64 0 1 1 165.3 161.3" fill="none" stroke="url(#emeraldGrad)" stroke-width="22.5" stroke-linecap="round"/>
-
-  <!-- Leading Luminous Meter Node (White Pip) -->
-  <circle cx="71" cy="157.1" r="11.25" fill="#ffffff"/>
+  <!-- Active Quota Arc (Pure Solid Emerald #22c55e, Zero Gloss) -->
+  <path d="M 71 157.1 A 64 64 0 1 1 165.3 161.3" fill="none" stroke="#22c55e" stroke-width="22.5" stroke-linecap="round"/>
 
   <!-- Precision Diagonal Q-Tail Spur -->
-  <line x1="144" y1="140" x2="198" y2="194" stroke="#10b981" stroke-width="22.5" stroke-linecap="round"/>
+  <line x1="144" y1="140" x2="198" y2="194" stroke="#22c55e" stroke-width="22.5" stroke-linecap="round"/>
 </svg>
