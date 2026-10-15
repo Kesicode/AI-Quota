@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="static/favicon-32x32.png" alt="AI-Quota Logo" width="64" height="64" />
+<img src="docs/logo.png" alt="AI-Quota Logo" width="160" height="160" />
 
 # AI-Quota
 

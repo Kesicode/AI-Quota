@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="media/icon.png" alt="AI-Quota" width="80" />
+<img src="media/icon.png" alt="AI-Quota" width="160" height="160" />
 
 # AI-Quota
 
