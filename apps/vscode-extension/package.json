@@ -58,18 +58,15 @@
                 {
                     "type": "webview",
                     "id": "ai-quota.quotaView",
-                    "name": "Quota",
-                    "icon": "media/quota-icon.svg"
+                    "name": "Quota"
                 },
                 {
                     "id": "ai-quota.accountsView",
-                    "name": "Accounts",
-                    "icon": "media/accounts-icon.svg"
+                    "name": "Accounts"
                 },
                 {
                     "id": "ai-quota.providersView",
-                    "name": "Providers",
-                    "icon": "media/providers-icon.svg"
+                    "name": "Providers"
                 }
             ]
         },
