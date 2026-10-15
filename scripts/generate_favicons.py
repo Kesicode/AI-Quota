@@ -1,108 +1,110 @@
-import math
+import base64
+import io
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFilter
+from collections import deque
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
 MEDIA = ROOT / "apps" / "vscode-extension" / "media"
 DOCS = ROOT / "docs"
 
-def render_ultra_minimal(size: int, supersample: int = 4) -> Image.Image:
-    dim = size * supersample
-    
-    # Base transparent canvas
-    img = Image.new("RGBA", (dim, dim), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    radius = int(dim * 0.225)
-    
-    # 1. Solid opaque Obsidian tile: #090a0f
-    draw.rounded_rectangle([0, 0, dim - 1, dim - 1], radius=radius, fill=(9, 10, 15, 255))
-    
-    # 2. Minimal hairline border
-    border_w = max(2, int(dim * 0.005))
-    draw.rounded_rectangle(
-        [0, 0, dim - 1, dim - 1],
-        radius=radius,
-        outline=(255, 255, 255, 20),
-        width=border_w,
-    )
+SRC_PATH = Path(r"C:/Users/kesi/.gemini/antigravity/brain/ef642a4a-08b5-4de3-b967-ea04ba2dd8b4/.user_uploaded/media_1792086397832_b6f5aa42.jpg")
 
-    # Center & Geometry (proportional bold geometry)
-    cx = dim * 0.468
-    cy = dim * 0.455
-    r = dim * 0.252
-    stroke_w = int(dim * 0.088)
-    r_mid = r - stroke_w / 2
-    track_bbox = [cx - r, cy - r, cx + r, cy + r]
+def process_master_image() -> Image.Image:
+    if SRC_PATH.exists():
+        im = Image.open(SRC_PATH).convert("RGBA")
+    else:
+        im = Image.open(DOCS / "logo.png").convert("RGBA")
+    w, h = im.size
 
-    # 3. Inactive Track (Clean dark graphite ring #1f242d, completely flat)
-    draw.arc(track_bbox, start=0, end=360, fill=(31, 36, 45, 255), width=stroke_w)
+    # Flood fill outer corner background to transparency
+    visited = set()
+    for start in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
+        q = deque([start])
+        visited.add(start)
+        while q:
+            x, y = q.popleft()
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in visited:
+                    r, g, b, _ = im.getpixel((nx, ny))
+                    if r <= 3 and g <= 3 and b <= 3:
+                        visited.add((nx, ny))
+                        q.append((nx, ny))
 
-    # 4. Active Quota Arc (Pure vibrant Emerald #22c55e, 100% solid, NO GLOSS, NO WHITE SPOT)
-    emerald = (34, 197, 94, 255)
-    draw.arc(track_bbox, start=135, end=45, fill=emerald, width=stroke_w)
+    mask = Image.new("L", (w, h), 255)
+    for x, y in visited:
+        mask.putpixel((x, y), 0)
 
-    # Precision rounded endcaps on the active arc
-    cap_r = stroke_w / 2
-    # Start cap at 135 deg
-    x_135 = cx + r_mid * math.cos(math.radians(135))
-    y_135 = cy + r_mid * math.sin(math.radians(135))
-    draw.ellipse([x_135 - cap_r, y_135 - cap_r, x_135 + cap_r, y_135 + cap_r], fill=emerald)
-
-    # End cap at 45 deg
-    x_45 = cx + r_mid * math.cos(math.radians(45))
-    y_45 = cy + r_mid * math.sin(math.radians(45))
-    draw.ellipse([x_45 - cap_r, y_45 - cap_r, x_45 + cap_r, y_45 + cap_r], fill=emerald)
-
-    # 5. Diagonal Q-Tail Spur (Solid engineered capsule at 45 degrees, matching emerald)
-    tail_s = (cx + r_mid * 0.38, cy + r_mid * 0.38)
-    tail_e = (cx + r_mid * 1.36, cy + r_mid * 1.36)
-    draw.line([tail_s, tail_e], fill=emerald, width=stroke_w)
-    draw.ellipse([tail_s[0] - cap_r, tail_s[1] - cap_r, tail_s[0] + cap_r, tail_s[1] + cap_r], fill=emerald)
-    draw.ellipse([tail_e[0] - cap_r, tail_e[1] - cap_r, tail_e[0] + cap_r, tail_e[1] + cap_r], fill=emerald)
-
-    return img.resize((size, size), Image.Resampling.LANCZOS)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=1.2))
+    im.putalpha(mask)
+    return im
 
 def main():
-    sizes = [16, 32, 48, 64, 128, 180, 256]
-    icons = {s: render_ultra_minimal(s) for s in sizes}
+    im = process_master_image()
 
-    # 1. Favicon 32x32 PNG (The source of truth)
     STATIC.mkdir(parents=True, exist_ok=True)
-    png32 = STATIC / "favicon-32x32.png"
-    icons[32].save(png32, format="PNG")
-    print(f"Saved {png32} (32x32)")
-
-    # 2. Docs Logo (256x256)
-    DOCS.mkdir(parents=True, exist_ok=True)
-    docs_logo = DOCS / "logo.png"
-    icons[256].save(docs_logo, format="PNG")
-    print(f"Saved {docs_logo} (256x256)")
-
-    # 3. Extension Media Icon (256x256)
     MEDIA.mkdir(parents=True, exist_ok=True)
-    ext_icon = MEDIA / "icon.png"
-    icons[256].save(ext_icon, format="PNG")
-    print(f"Saved {ext_icon} (256x256)")
+    DOCS.mkdir(parents=True, exist_ok=True)
 
-    # 4. Static Favicon PNG (128x128)
-    png128 = STATIC / "favicon.png"
-    icons[128].save(png128, format="PNG")
-    print(f"Saved {png128} (128x128)")
+    # 1. docs/logo.png (512x512)
+    logo512 = im.resize((512, 512), Image.Resampling.LANCZOS)
+    logo512.save(DOCS / "logo.png", format="PNG")
+    print(f"Saved {DOCS / 'logo.png'} (512x512)")
 
-    # 5. Apple Touch Icon (180x180)
-    apple_icon = STATIC / "apple-touch-icon.png"
-    icons[180].save(apple_icon, format="PNG")
-    print(f"Saved {apple_icon} (180x180)")
+    # 2. apps/vscode-extension/media/icon.png (256x256)
+    icon256 = im.resize((256, 256), Image.Resampling.LANCZOS)
+    icon256.save(MEDIA / "icon.png", format="PNG")
+    print(f"Saved {MEDIA / 'icon.png'} (256x256)")
 
-    # 6. Favicon .ico
-    ico_path = STATIC / "favicon.ico"
-    icons[32].save(
-        ico_path,
+    # 3. static/favicon-32x32.png (32x32)
+    fav32 = im.resize((32, 32), Image.Resampling.LANCZOS)
+    fav32.save(STATIC / "favicon-32x32.png", format="PNG")
+    print(f"Saved {STATIC / 'favicon-32x32.png'} (32x32)")
+
+    # 4. static/favicon.png (128x128)
+    fav128 = im.resize((128, 128), Image.Resampling.LANCZOS)
+    fav128.save(STATIC / "favicon.png", format="PNG")
+    print(f"Saved {STATIC / 'favicon.png'} (128x128)")
+
+    # 5. static/apple-touch-icon.png (180x180)
+    fav180 = im.resize((180, 180), Image.Resampling.LANCZOS)
+    fav180.save(STATIC / "apple-touch-icon.png", format="PNG")
+    print(f"Saved {STATIC / "apple-touch-icon.png"} (180x180)")
+
+    # 6. static/favicon.ico (Multi-size ICO)
+    ico32 = im.resize((32, 32), Image.Resampling.LANCZOS)
+    ico32.save(
+        STATIC / "favicon.ico",
         format="ICO",
-        sizes=[(16, 16), (32, 32), (48, 48)],
+        sizes=[(16, 16), (32, 32), (48, 48), (64, 64)],
     )
-    print(f"Saved {ico_path}")
+    print(f"Saved {STATIC / 'favicon.ico'} (multi-size)")
+
+    # 7. static/favicon.svg (SVG format with embedded high-res master)
+    buf = io.BytesIO()
+    logo512.save(buf, format="PNG")
+    b64_logo = base64.b64encode(buf.getvalue()).decode("ascii")
+    svg_content = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">\n'
+        f'  <image href="data:image/png;base64,{b64_logo}" width="512" height="512" />\n'
+        '</svg>\n'
+    )
+    (STATIC / "favicon.svg").write_text(svg_content, encoding="utf-8")
+    print(f"Saved {STATIC / 'favicon.svg'}")
+
+    # 8. apps/vscode-extension/media/quota-icon.svg (Activity Bar SVG)
+    buf_activity = io.BytesIO()
+    im.resize((96, 96), Image.Resampling.LANCZOS).save(buf_activity, format="PNG")
+    b64_act = base64.b64encode(buf_activity.getvalue()).decode("ascii")
+    activity_svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">\n'
+        f'  <image href="data:image/png;base64,{b64_act}" width="24" height="24" />\n'
+        '</svg>\n'
+    )
+    (MEDIA / "quota-icon.svg").write_text(activity_svg, encoding="utf-8")
+    print(f"Saved {MEDIA / 'quota-icon.svg'}")
 
 if __name__ == "__main__":
     main()
