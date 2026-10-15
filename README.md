@@ -9,7 +9,7 @@
 Manage, monitor, predict, and switch multiple AI accounts across Google Antigravity, Gemini API, GitHub Copilot, OpenAI Codex, and Google Cloud — from a dedicated IDE extension and local-first dashboard.
 
 [![Tests](https://img.shields.io/badge/tests-62%2F62%20passing-brightgreen?style=flat-square&logo=pytest)](tests/)
-[![Extension](https://img.shields.io/badge/extension-v2.0.0-blue?style=flat-square&logo=visual-studio-code)](apps/vscode-extension/)
+[![Extension](https://img.shields.io/badge/extension-v2.0.1-blue?style=flat-square&logo=visual-studio-code)](apps/vscode-extension/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python)](https://python.org)
 [![Security](https://img.shields.io/badge/security-local--only-orange?style=flat-square)](#security--privacy)
@@ -139,26 +139,26 @@ Customize behavior directly in your editor's `settings.json`:
 
 ### 1. From VSIX Package
 
-Download the latest `ai-quota-2.0.0.vsix` from [**GitHub Releases**](https://github.com/Kesicode/AI-Quota/releases/latest).
+Download the latest `ai-quota.vsix` (or `ai-quota-2.0.1.vsix`) from [**GitHub Releases**](https://github.com/Kesicode/AI-Quota/releases/latest).
 
 #### Install via IDE GUI:
 1. Open the Extensions view (`Ctrl+Shift+X` or `Cmd+Shift+X`).
 2. Click the `···` menu at the top-right of the Extensions view.
-3. Select **Install from VSIX...** and select `ai-quota-2.0.0.vsix`.
+3. Select **Install from VSIX...** and select `ai-quota.vsix`.
 
 #### Install via CLI:
 ```bash
 # Google Antigravity IDE
-antigravity --install-extension ai-quota-2.0.0.vsix
+antigravity --install-extension ai-quota.vsix
 
 # Visual Studio Code
-code --install-extension ai-quota-2.0.0.vsix
+code --install-extension ai-quota.vsix
 
 # Cursor
-cursor --install-extension ai-quota-2.0.0.vsix
+cursor --install-extension ai-quota.vsix
 
 # VSCodium
-codium --install-extension ai-quota-2.0.0.vsix
+codium --install-extension ai-quota.vsix
 ```
 
 #### One-Click Windows Script:

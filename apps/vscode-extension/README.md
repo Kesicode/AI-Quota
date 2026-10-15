@@ -8,7 +8,7 @@
 
 Monitor AI usage, switch accounts, and track quota across every provider — directly inside your IDE.
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue?style=flat-square)](https://github.com/Kesicode/AI-Quota/releases)
+[![Version](https://img.shields.io/badge/version-2.0.1-blue?style=flat-square)](https://github.com/Kesicode/AI-Quota/releases)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.85%2B-blue?style=flat-square&logo=visual-studio-code)](https://code.visualstudio.com)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
@@ -36,13 +36,13 @@ The agent binds to `http://127.0.0.1:8765`. The extension connects automatically
 ## Installation
 
 ### From GitHub Release
-Download `ai-quota-2.0.0.vsix` from the [latest release](https://github.com/Kesicode/AI-Quota/releases/latest):
+Download `ai-quota.vsix` (or `ai-quota-2.0.1.vsix`) from the [latest release](https://github.com/Kesicode/AI-Quota/releases/latest):
 
 ```bash
-antigravity --install-extension ai-quota-2.0.0.vsix   # Antigravity IDE
-code        --install-extension ai-quota-2.0.0.vsix   # VS Code
-cursor      --install-extension ai-quota-2.0.0.vsix   # Cursor
-codium      --install-extension ai-quota-2.0.0.vsix   # VSCodium
+antigravity --install-extension ai-quota.vsix   # Antigravity IDE
+code        --install-extension ai-quota.vsix   # VS Code
+cursor      --install-extension ai-quota.vsix   # Cursor
+codium      --install-extension ai-quota.vsix   # VSCodium
 ```
 
 Or via UI: **Extensions** (`Ctrl+Shift+X`) → `···` → **Install from VSIX…**
