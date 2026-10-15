@@ -250,12 +250,33 @@ class SwitchEngine:
         Poll get_current_account() until it matches target or timeout.
         Returns (verified: bool, active_account_id: str | None).
         """
+        target_email = ""
+        target_id_str = str(target_account_id)
+        try:
+            from packages.database.connection import db_session
+            with db_session() as conn:
+                row = conn.execute(
+                    "SELECT account_id, email FROM accounts WHERE account_id=? OR id=?",
+                    (target_id_str, int(target_id_str) if target_id_str.isdigit() else -1),
+                ).fetchone()
+                if row:
+                    target_id_str = row[0] or target_id_str
+                    target_email = (row[1] or "").lower()
+        except Exception:
+            pass
+
         deadline = time.monotonic() + self.verify_timeout
         while time.monotonic() < deadline:
             try:
                 identity: AccountIdentity | None = adapter.get_current_account()
-                if identity and identity.account_id == target_account_id:
-                    return True, identity.account_id
+                if identity:
+                    ident_email = (identity.identity_key or identity.account_id or "").lower()
+                    if (
+                        identity.account_id == target_account_id
+                        or identity.account_id == target_id_str
+                        or (target_email and ident_email == target_email)
+                    ):
+                        return True, identity.account_id
                 active_id = identity.account_id if identity else None
             except Exception as exc:
                 logger.debug("Verification poll error: %s", exc)

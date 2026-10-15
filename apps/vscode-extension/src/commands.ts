@@ -78,6 +78,15 @@ export function registerAllCommands(
         try {
           const result = await client.switchAccount(selected.accountId);
           if (result.status === "success" && result.verified) {
+            // Signal official extension UI panels to refresh immediately without window reload
+            try {
+              const allCmds = await vscode.commands.getCommands(true);
+              if (allCmds.includes("antigravity.handleAuthRefresh")) {
+                await vscode.commands.executeCommand("antigravity.handleAuthRefresh");
+              }
+            } catch {
+              // best effort
+            }
             vscode.window.showInformationMessage(
               `✓ Switched to ${selected.label} (verified via ${result.method_used})`
             );

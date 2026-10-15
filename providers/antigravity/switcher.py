@@ -33,10 +33,23 @@ _READINESS_TIMEOUT = 20.0   # seconds to wait for hub to come back after restart
 _READINESS_POLL = 1.0
 
 
+def kill_antigravity_language_servers() -> bool:
+    """Terminate running language server processes so official extension respawns them with new credential."""
+    import subprocess
+    cmd = r'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -match "language[-_]server" -and $_.CommandLine -match "antigravity" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }'
+    try:
+        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", cmd], timeout=6, check=False)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to terminate language server: %s", exc)
+        return False
+
+
 class AntigravitySwitcher:
     """
     Handles account switching for the Antigravity provider.
-    Uses instant (DPAPI) on Windows, assisted fallback on others.
+    Uses instant (gemini:antigravity OS vault + process respawn) on Windows,
+    assisted fallback on others.
     """
 
     def __init__(self, hub_client: "HubClient", credential_manager: "CredentialManager") -> None:  # noqa: F821
@@ -60,40 +73,35 @@ class AntigravitySwitcher:
             return self._assisted_switch(target_account_id)
 
     def _instant_switch(self, target_account_id: str) -> SwitchResult:
-        """Windows instant switch via credential vault + hub POST."""
-        logger.info("Starting instant switch to %s (Windows DPAPI path)", target_account_id)
+        """Windows instant switch via OS Credential Manager (gemini:antigravity) + process respawn."""
+        logger.info("Starting instant switch to %s (Windows Credential Manager path)", target_account_id)
 
         # 1. Retrieve credential blob from OS vault
-        secret = self._creds.retrieve(target_account_id)
-        if not secret:
-            logger.warning("No credential stored for account %s — falling back to assisted", target_account_id)
+        if not self._creds.has_credential(target_account_id):
+            logger.warning("No credential stored in vault for account %s — falling back to assisted", target_account_id)
             return self._assisted_switch(target_account_id)
 
-        # 2. POST credential to hub
+        # 2. Apply target credential into gemini:antigravity target in Windows Credential Manager
+        applied = self._creds.apply_antigravity_credential(target_account_id)
+        if not applied:
+            logger.error("Failed to write credential to gemini:antigravity — falling back to assisted")
+            return self._assisted_switch(target_account_id)
+
+        # 3. Invalidate probe caches so verification sees fresh process
         try:
-            import json
-            # The credential blob is expected to be the account session/token data
-            # wrapped in the format AGY hub expects
-            payload: dict = {}
-            try:
-                payload = json.loads(secret)
-            except Exception:
-                payload = {"credential": secret}
+            from app.providers.antigravity_2 import _PROBE_CACHE, _WORKING_ENDPOINT
+            _PROBE_CACHE["expires"] = 0.0
+            _WORKING_ENDPOINT.update({"pid": None, "port": None, "csrf": None})
+        except Exception:
+            pass
 
-            payload["accountId"] = target_account_id
+        # 4. Terminate language server process so official IDE extension respawns it with new credential
+        kill_antigravity_language_servers()
 
-            result = self._hub.switch_account(payload)
-            if not result.get("ok", False) and not result.get("success", False):
-                raise RuntimeError(result.get("error") or "Hub switch returned not-ok")
-        except Exception as exc:
-            logger.error("Hub switch POST failed: %s — falling back to assisted", exc)
-            return self._assisted_switch(target_account_id)
+        # 5. Wait for hub readiness
+        self._wait_for_readiness(timeout=10.0)
 
-        # 3. Wait for hub readiness
-        self._wait_for_readiness()
-
-        # 4. Verify (caller SwitchEngine does the final verification)
-        logger.info("Instant switch posted successfully for %s", target_account_id)
+        logger.info("Instant switch credential applied and process respawned for %s", target_account_id)
         return SwitchResult(
             requested_account_id=target_account_id,
             status=SwitchStatus.PENDING,    # SwitchEngine will verify and set final status

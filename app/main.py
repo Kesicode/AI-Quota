@@ -57,48 +57,7 @@ except ImportError:
 
 
 
-def normalize_account(account: dict[str, Any]) -> dict[str, Any]:
-    item = dict(account)
-    snaps = get_latest_snapshots(item["id"])
-    item["snapshots"] = snaps
-
-    # Compute telemetry age based on last_seen_at or the latest snapshot
-    age = None
-    if item.get("last_seen_at"):
-        age = payload_age(item["last_seen_at"])
-    elif snaps:
-        latest = max(snaps, key=lambda s: s.get("captured_at", ""))
-        age = payload_age(latest.get("captured_at"))
-    item["telemetry_age_seconds"] = age
-
-    # Extract context window snapshot if present
-    context = next((s for s in snaps if s.get("window_name") == "Context Window"), None)
-    if context:
-        item["context_window"] = {
-            "used_percentage": (100.0 - float(context["remaining_percent"])) if context.get("remaining_percent") is not None else None,
-            "context_window_size": context.get("limit_units"),
-        }
-
-    # Best remaining percentage for non-context quota
-    usable = [
-        float(s["remaining_percent"])
-        for s in snaps
-        if s.get("remaining_percent") is not None and s.get("window_name") != "Context Window"
-    ]
-    item["best_remaining"] = max(usable) if usable else None
-
-    # Attach provider truth metadata
-    truth = get_provider_truth(item)
-    item["provider_truth"] = {
-        "authority_type": truth.authority_type,
-        "label": truth.label,
-        "priority": truth.priority,
-        "live": truth.live,
-        "truth": truth.truth,
-        "note": truth.note,
-    }
-
-    return item
+from app.services.account_serializer import normalize_account
 
 
 @app.get("/")

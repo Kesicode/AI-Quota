@@ -71,7 +71,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
       // Low quota notification check
       const threshold = config.get<number>("notificationThreshold", 20);
-      await checkLowQuotaNotifications(agentClient!, threshold);
+      await checkLowQuotaNotifications(agentClient!, threshold, context);
     } catch {
       // Agent not running — show offline state in status bar
       statusBar?.setOffline();
@@ -130,27 +130,47 @@ export function deactivate(): void {
 
 async function checkLowQuotaNotifications(
   client: AgentClient,
-  threshold: number
+  threshold: number,
+  context: vscode.ExtensionContext
 ): Promise<void> {
   try {
     const accounts = await client.getAccounts();
+    const stored = context.globalState.get<string[]>("ai-quota.notifiedKeys", []);
+    const notified = new Set<string>(stored);
+
     for (const account of accounts) {
       const remaining = account.best_remaining;
-      if (remaining !== null && remaining !== undefined && remaining <= threshold) {
-        const key = `notified_${account.id}_${Math.floor(remaining / 5) * 5}`;
-        // Simple dedup: only notify once per 5% band
-        const alreadyNotified = _notifiedKeys.has(key);
-        if (!alreadyNotified) {
-          _notifiedKeys.add(key);
-          vscode.window.showWarningMessage(
-            `AI-Quota: ${account.display_name || account.email} quota at ${remaining.toFixed(0)}%`,
-            "Switch Account",
-            "Dismiss"
-          ).then((action) => {
-            if (action === "Switch Account") {
-              vscode.commands.executeCommand("ai-quota.switchAccount");
+      if (remaining !== null && remaining !== undefined) {
+        if (remaining <= threshold) {
+          const key = `notified_${account.id}_${Math.floor(remaining / 5) * 5}`;
+          if (!notified.has(key)) {
+            notified.add(key);
+            context.globalState.update("ai-quota.notifiedKeys", Array.from(notified));
+
+            vscode.window
+              .showWarningMessage(
+                `AI-Quota: ${account.label || account.display_name || account.email} quota at ${remaining.toFixed(0)}%`,
+                "Switch Account",
+                "Dismiss"
+              )
+              .then((action) => {
+                if (action === "Switch Account") {
+                  vscode.commands.executeCommand("ai-quota.switchAccount");
+                }
+              });
+          }
+        } else if (remaining > threshold + 10) {
+          // Quota has recovered or reset — clean up old notification keys for this account
+          let changed = false;
+          for (const k of Array.from(notified)) {
+            if (k.startsWith(`notified_${account.id}_`)) {
+              notified.delete(k);
+              changed = true;
             }
-          });
+          }
+          if (changed) {
+            context.globalState.update("ai-quota.notifiedKeys", Array.from(notified));
+          }
         }
       }
     }
@@ -158,5 +178,3 @@ async function checkLowQuotaNotifications(
     // silent — notification is best-effort
   }
 }
-
-const _notifiedKeys = new Set<string>();

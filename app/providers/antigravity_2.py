@@ -241,10 +241,69 @@ def _parse_user_status(raw: dict[str, Any]) -> tuple[str | None, str | None, lis
     return (str(email) if email else None, str(plan) if plan else None, rows)
 
 
+_WORKING_ENDPOINT: dict[str, Any] = {
+    "pid": None,
+    "port": None,
+    "csrf": None,
+    "secure": True,
+}
+
+
+def _fetch_summary(port: int, csrf: str | None, secure: bool) -> dict[str, Any] | None:
+    summary: dict[str, Any] | None = None
+    for endpoint in ("RetrieveUserQuotaSummary", "GetUserStatus"):
+        try:
+            raw = _post_local(port, f"/exa.language_server_pb.LanguageServerService/{endpoint}", csrf, secure, timeout=2.5)
+            if endpoint == "RetrieveUserQuotaSummary":
+                windows = _parse_summary(raw)
+                if windows:
+                    summary = {"raw": raw, "windows": windows}
+                    break
+            else:
+                email, plan, rows = _parse_user_status(raw)
+                if rows or email:
+                    summary = {"raw": raw, "windows": rows, "email": email, "plan_tier": plan}
+                    break
+        except Exception:
+            continue
+
+    if summary and not summary.get("email"):
+        for sec in (secure, not secure):
+            try:
+                raw_status = _post_local(port, "/exa.language_server_pb.LanguageServerService/GetUserStatus", csrf, sec, timeout=2.0)
+                email, plan, _ = _parse_user_status(raw_status)
+                if email:
+                    summary["email"] = email
+                    summary["plan_tier"] = summary.get("plan_tier") or plan
+                    break
+            except Exception:
+                continue
+
+    return summary
+
+
 def probe_antigravity_2() -> dict[str, Any]:
     now = time.time()
     if _PROBE_CACHE["expires"] > now:
         return _PROBE_CACHE["payload"] or {"ok": False, "error": _PROBE_CACHE["error"] or "cached probe failure"}
+
+    # ── Fast path: test previously verified working endpoint first ──────────
+    cached_port = _WORKING_ENDPOINT.get("port")
+    if cached_port:
+        try:
+            c_csrf = _WORKING_ENDPOINT.get("csrf")
+            c_sec = bool(_WORKING_ENDPOINT.get("secure", True))
+            _post_local(int(cached_port), "/exa.language_server_pb.LanguageServerService/GetUnleashData", c_csrf, c_sec, timeout=0.6)
+            summary = _fetch_summary(int(cached_port), c_csrf, c_sec)
+            if summary and summary.get("email"):
+                summary["ok"] = True
+                summary["captured_at"] = time.time()
+                summary["source"] = "antigravity-2.0-local-language-server"
+                _PROBE_CACHE.update({"expires": now + 5.0, "payload": summary, "error": None})
+                return summary
+        except Exception:
+            _WORKING_ENDPOINT.update({"pid": None, "port": None, "csrf": None})
+
     last_error = "Antigravity 2.0 local quota service not found"
     try:
         servers = _discover_desktop_servers()
@@ -260,51 +319,25 @@ def probe_antigravity_2() -> dict[str, Any]:
                     continue
                 seen.add(port)
                 ready = False
+                matched_sec = True
                 for secure in (True, False):
                     try:
-                        _post_local(port, "/exa.language_server_pb.LanguageServerService/GetUnleashData", csrf, secure)
+                        _post_local(port, "/exa.language_server_pb.LanguageServerService/GetUnleashData", csrf, secure, timeout=0.4)
                         ready = True
+                        matched_sec = secure
                         break
                     except Exception as exc:
                         last_error = str(exc)
                 if not ready:
                     continue
-                summary: dict[str, Any] | None = None
-                for endpoint in ("RetrieveUserQuotaSummary", "GetUserStatus"):
-                    raw = None
-                    for secure in (True, False):
-                        try:
-                            raw = _post_local(port, f"/exa.language_server_pb.LanguageServerService/{endpoint}", csrf, secure)
-                            break
-                        except Exception as exc:
-                            last_error = f"{endpoint}: {exc}"
-                    if raw is None:
-                        continue
-                    if endpoint == "RetrieveUserQuotaSummary":
-                        windows = _parse_summary(raw)
-                        if windows:
-                            summary = {"raw": raw, "windows": windows}
-                            break
-                    else:
-                        email, plan, rows = _parse_user_status(raw)
-                        if rows or email:
-                            summary = {"raw": raw, "windows": rows, "email": email, "plan_tier": plan}
-                            break
+
+                summary = _fetch_summary(port, csrf, matched_sec)
                 if summary:
-                    if not summary.get("email"):
-                        for secure in (True, False):
-                            try:
-                                raw_status = _post_local(port, "/exa.language_server_pb.LanguageServerService/GetUserStatus", csrf, secure)
-                                email, plan, _ = _parse_user_status(raw_status)
-                                summary["email"] = email
-                                summary["plan_tier"] = summary.get("plan_tier") or plan
-                                break
-                            except Exception:
-                                continue
                     summary["ok"] = bool(summary.get("email"))
                     summary["captured_at"] = time.time()
                     summary["source"] = "antigravity-2.0-local-language-server"
                     if summary["ok"]:
+                        _WORKING_ENDPOINT.update({"pid": server.get("pid"), "port": port, "csrf": csrf, "secure": matched_sec})
                         _PROBE_CACHE.update({"expires": now + 5.0, "payload": summary, "error": None})
                         return summary
         raise RuntimeError(last_error)
@@ -378,6 +411,15 @@ class Antigravity2Adapter(ProviderAdapter):
         if not account:
             return {"ok": False, "changed": 0, "matched": 0, "discovered": 0, "error": "Account is in ignore list"}
 
+        # Auto-vault active credential in OS vault so this account can be switched back to instantly
+        try:
+            from packages.security.credential_manager import get_credential_manager
+            cm = get_credential_manager()
+            acc_id = account.get("account_id") or str(account["id"])
+            cm.capture_active_antigravity_credential(acc_id, expected_email=email)
+        except Exception:
+            pass
+
         captured = datetime.fromtimestamp(
             float(probe_result.get("captured_at") or time.time()), timezone.utc
         ).isoformat()
@@ -429,9 +471,9 @@ class Antigravity2Adapter(ProviderAdapter):
         }
 
     def connect_account(self, account: dict[str, Any]) -> dict[str, Any]:
-        # Invalidate probe cache so we always get a fresh read after a switch.
-        # Without this, verification sees the old active email for up to 5 seconds.
+        # Invalidate probe and endpoint caches so we always get a fresh read after a switch.
         _PROBE_CACHE["expires"] = 0.0
+        _WORKING_ENDPOINT.update({"pid": None, "port": None, "csrf": None})
         result = probe_antigravity_2()
         if result.get("ok"):
             active_email = str(result.get("email") or "").strip().lower()
@@ -462,3 +504,43 @@ class Antigravity2Adapter(ProviderAdapter):
             ),
             "error": result.get("error"),
         }
+
+    def capabilities(self) -> Any:
+        import platform
+        from packages.core.models import ProviderCapabilities, SwitchMethod
+        is_win = platform.system() == "Windows"
+        return ProviderCapabilities(
+            supports_quota=True,
+            supports_usage=True,
+            supports_account_detection=True,
+            supports_account_switching=True,
+            supports_instant_switch=is_win,
+            supports_credential_vault=True,
+            supports_history=True,
+            supports_realtime=True,
+            switch_method=SwitchMethod.INSTANT if is_win else SwitchMethod.ASSISTED,
+            switch_requires_restart=False,
+            switch_cooldown_seconds=30,
+            switch_max_per_hour=10,
+        )
+
+    def get_current_account(self) -> Any:
+        from packages.core.models import AccountIdentity
+        probe = probe_antigravity_2()
+        if probe.get("ok") and probe.get("email"):
+            email = str(probe["email"]).strip().lower()
+            return AccountIdentity(
+                account_id=email,
+                identity_key=email,
+                provider="Antigravity",
+                client="Antigravity 2.0",
+                display_name=email,
+            )
+        return None
+
+    def switch_account(self, account_id: str, *, force: bool = False) -> Any:
+        from providers.antigravity.switcher import AntigravitySwitcher
+        from packages.security.credential_manager import get_credential_manager
+        switcher = AntigravitySwitcher(None, get_credential_manager())
+        return switcher.switch(account_id)
+

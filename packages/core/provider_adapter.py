@@ -64,9 +64,22 @@ class ProviderAdapter(ABC):
     def truth(self) -> ProviderTruth:
         """Authority classification metadata."""
 
-    @abstractmethod
     def capabilities(self) -> ProviderCapabilities:
-        """Declare what this adapter can do. Must not raise."""
+        """Declare what this adapter can do. Default: basic quota support without switching."""
+        return ProviderCapabilities(
+            supports_quota=True,
+            supports_usage=False,
+            supports_account_detection=False,
+            supports_account_switching=False,
+            supports_instant_switch=False,
+            supports_credential_vault=False,
+            supports_history=False,
+            supports_realtime=False,
+            switch_method=SwitchMethod.UNSUPPORTED,
+            switch_requires_restart=False,
+            switch_cooldown_seconds=30,
+            switch_max_per_hour=10,
+        )
 
     # ─── Existing abstract methods (backward-compatible) ─────────────────
 

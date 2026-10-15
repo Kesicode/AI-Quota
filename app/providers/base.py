@@ -30,7 +30,10 @@ class QuotaWindowResult:
     description: str | None = None
 
 
-class ProviderAdapter(ABC):
+from packages.core.provider_adapter import ProviderAdapter as _CoreProviderAdapter
+
+
+class ProviderAdapter(_CoreProviderAdapter):
     """Abstract base class for all AI Quota provider adapters."""
 
     @property

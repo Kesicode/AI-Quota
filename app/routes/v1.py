@@ -44,37 +44,9 @@ DATA_DIR = ROOT / "data"
 # ─── Helper imports ───────────────────────────────────────────────────────
 
 def _list_accounts() -> list[dict[str, Any]]:
-    from app.services import list_accounts as _la, get_latest_snapshots
-    from app.utils.time import payload_age
-    from app.providers import get_provider_truth
-    accounts = _la()
-    result = []
-    for acc in accounts:
-        item = dict(acc)
-        snaps = get_latest_snapshots(item["id"])
-        item["snapshots"] = snaps
-        age = payload_age(item.get("last_seen_at"))
-        if age is None and snaps:
-            latest = max(snaps, key=lambda s: s.get("captured_at", ""))
-            age = payload_age(latest.get("captured_at"))
-        item["telemetry_age_seconds"] = age
-        usable = [
-            float(s["remaining_percent"])
-            for s in snaps
-            if s.get("remaining_percent") is not None and s.get("window_name") != "Context Window"
-        ]
-        item["best_remaining"] = max(usable) if usable else None
-        truth = get_provider_truth(item)
-        item["provider_truth"] = {
-            "authority_type": truth.authority_type,
-            "label": truth.label,
-            "priority": truth.priority,
-            "live": truth.live,
-            "truth": truth.truth,
-            "note": truth.note,
-        }
-        result.append(item)
-    return result
+    from app.services.account_service import list_accounts as _la
+    from app.services.account_serializer import serialize_accounts
+    return serialize_accounts(_la())
 
 
 def _get_setting(key: str, default: str = "") -> str:
