@@ -15,7 +15,7 @@ def _fire_webhooks_background(changed: int) -> None:
     if changed <= 0:
         return
     try:
-        from app.routes.v1 import fire_quota_alerts
+        from app.services.webhook_service import fire_quota_alerts
         result = fire_quota_alerts()
         if result.get("fired", 0) > 0:
             logger.info(

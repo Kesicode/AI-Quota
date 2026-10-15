@@ -63,7 +63,7 @@ def _list_accounts() -> list[dict[str, Any]]:
             for s in snaps
             if s.get("remaining_percent") is not None and s.get("window_name") != "Context Window"
         ]
-        item["best_remaining"] = min(usable) if usable else None
+        item["best_remaining"] = max(usable) if usable else None
         truth = get_provider_truth(item)
         item["provider_truth"] = {
             "authority_type": truth.authority_type,
@@ -824,18 +824,9 @@ class WebhookConfig(BaseModel):
 @router.get("/webhooks/config")
 def get_webhook_config() -> dict[str, Any]:
     """Return current webhook configuration from settings table."""
-    from app.database import db_session
+    from app.services.webhook_service import get_webhook_config as _get_cfg
     try:
-        with db_session() as conn:
-            rows = conn.execute(
-                "SELECT key, value FROM settings WHERE key IN ('webhook_url','webhook_threshold','webhook_enabled')"
-            ).fetchall()
-        cfg = {r["key"]: r["value"] for r in rows}
-        return {
-            "webhook_url":       cfg.get("webhook_url"),
-            "webhook_threshold": int(cfg["webhook_threshold"]) if "webhook_threshold" in cfg else 20,
-            "webhook_enabled":   cfg.get("webhook_enabled", "false").lower() == "true",
-        }
+        return _get_cfg()
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -912,53 +903,10 @@ def fire_quota_alerts() -> dict[str, Any]:
     """
     Scan all accounts and fire webhook alerts for any below the threshold.
     Called automatically by the sync engine and can be triggered manually.
+    Delegates to app.services.webhook_service to avoid circular imports.
     """
-    import urllib.request, urllib.error, json as _json
-    from app.services.account_service import list_accounts
-    from app.utils.time import now_iso
-
-    cfg = get_webhook_config()
-    if not cfg.get("webhook_enabled") or not cfg.get("webhook_url"):
-        return {"ok": True, "fired": 0, "skipped": "webhook_disabled_or_unconfigured"}
-
-    threshold = cfg.get("webhook_threshold", 20)
-    url = cfg["webhook_url"]
-    accounts = list_accounts()
-    fired = 0
-    errors: list[str] = []
-
-    for acc in accounts:
-        pct = acc.get("best_remaining")
-        if pct is None or pct > threshold:
-            continue
-
-        payload = _json.dumps({
-            "event":        "quota_low",
-            "source":       "ai-quota",
-            "timestamp":    now_iso(),
-            "account_id":   acc.get("account_id") or str(acc["id"]),
-            "display_name": acc.get("display_name") or acc.get("email"),
-            "provider":     acc.get("provider"),
-            "remaining_pct": pct,
-            "threshold_pct": threshold,
-            "message": (
-                f"AI-Quota alert: {acc.get('display_name') or acc.get('email')} "
-                f"quota at {pct:.0f}% (threshold: {threshold}%)"
-            ),
-        }).encode()
-        try:
-            req = urllib.request.Request(
-                url, data=payload,
-                headers={"Content-Type": "application/json", "User-Agent": "AI-Quota/2.0"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=5):
-                pass
-            fired += 1
-        except Exception as e:
-            errors.append(f"{acc.get('email')}: {e}")
-
-    return {"ok": True, "fired": fired, "errors": errors}
+    from app.services.webhook_service import fire_quota_alerts as _fire
+    return _fire()
 
 
 # ─── Phase 20 — Quota Matrix ──────────────────────────────────────────────────

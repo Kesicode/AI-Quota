@@ -22,11 +22,14 @@ import { registerAllCommands } from "./commands";
 let statusBar: QuotaStatusBar | null = null;
 let agentClient: AgentClient | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
+let syncTimer: NodeJS.Timeout | null = null;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const config = vscode.workspace.getConfiguration("ai-quota");
   const agentUrl = config.get<string>("agentUrl", "http://127.0.0.1:8765");
   const pollInterval = config.get<number>("pollInterval", 30) * 1000;
+  // Sync runs every 5 minutes (configurable). Separate from the fast UI poll.
+  const syncInterval = config.get<number>("syncIntervalMinutes", 5) * 60 * 1000;
 
   // ── Create the shared agent HTTP client ──────────────────────────────────
   agentClient = new AgentClient(agentUrl);
@@ -58,10 +61,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     quotaSidebarProvider,
   });
 
-  // ── Polling ───────────────────────────────────────────────────────────────
-  const refresh = async () => {
+  // ── Fast poll: refresh UI from cached agent state (accounts only) ─────────
+  const fastRefresh = async () => {
     try {
-      await agentClient!.sync();
       statusBar?.refresh();
       accountsProvider.refresh();
       providersProvider.refresh();
@@ -76,12 +78,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
 
-  // Initial refresh
-  await refresh();
+  // ── Slow sync: triggers full provider scan (port discovery, etc.) ─────────
+  const slowSync = async () => {
+    try {
+      await agentClient!.sync();
+      await fastRefresh();
+    } catch {
+      statusBar?.setOffline();
+    }
+  };
 
-  // Periodic refresh
-  pollTimer = setInterval(refresh, pollInterval);
+  // Initial sync + refresh on activation
+  await slowSync();
+
+  // Fast UI poll (default 30s) — reads cached data, never blocks
+  pollTimer = setInterval(fastRefresh, pollInterval);
   context.subscriptions.push({ dispose: () => pollTimer && clearInterval(pollTimer) });
+
+  // Slow sync (default 5 min) — triggers full provider sync
+  syncTimer = setInterval(slowSync, syncInterval);
+  context.subscriptions.push({ dispose: () => syncTimer && clearInterval(syncTimer) });
 
   // Config change listener — update poll interval if changed
   context.subscriptions.push(
@@ -89,7 +105,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (e.affectsConfiguration("ai-quota.pollInterval")) {
         if (pollTimer) clearInterval(pollTimer);
         const newInterval = vscode.workspace.getConfiguration("ai-quota").get<number>("pollInterval", 30) * 1000;
-        pollTimer = setInterval(refresh, newInterval);
+        pollTimer = setInterval(fastRefresh, newInterval);
+      }
+      if (e.affectsConfiguration("ai-quota.syncIntervalMinutes")) {
+        if (syncTimer) clearInterval(syncTimer);
+        const newSync = vscode.workspace.getConfiguration("ai-quota").get<number>("syncIntervalMinutes", 5) * 60 * 1000;
+        syncTimer = setInterval(slowSync, newSync);
       }
     })
   );
@@ -99,6 +120,10 @@ export function deactivate(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
   }
   statusBar?.dispose();
 }

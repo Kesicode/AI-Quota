@@ -429,6 +429,9 @@ class Antigravity2Adapter(ProviderAdapter):
         }
 
     def connect_account(self, account: dict[str, Any]) -> dict[str, Any]:
+        # Invalidate probe cache so we always get a fresh read after a switch.
+        # Without this, verification sees the old active email for up to 5 seconds.
+        _PROBE_CACHE["expires"] = 0.0
         result = probe_antigravity_2()
         if result.get("ok"):
             active_email = str(result.get("email") or "").strip().lower()

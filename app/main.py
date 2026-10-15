@@ -85,7 +85,7 @@ def normalize_account(account: dict[str, Any]) -> dict[str, Any]:
         for s in snaps
         if s.get("remaining_percent") is not None and s.get("window_name") != "Context Window"
     ]
-    item["best_remaining"] = min(usable) if usable else None
+    item["best_remaining"] = max(usable) if usable else None
 
     # Attach provider truth metadata
     truth = get_provider_truth(item)

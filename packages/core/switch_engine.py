@@ -163,6 +163,9 @@ class SwitchEngine:
             )
 
         try:
+            # Mark switch as in progress so external callers can check status
+            _switch_in_progress = True
+
             # ── 2. Cooldown check ──────────────────────────────────────────
             if not force:
                 err = _check_cooldown(provider_id, self.cooldown_seconds, self.max_switches_per_hour)
@@ -239,6 +242,7 @@ class SwitchEngine:
             )
 
         finally:
+            _switch_in_progress = False
             _switch_lock.release()
 
     def _verify(self, adapter: Any, target_account_id: str) -> tuple[bool, str | None]:
@@ -284,3 +288,8 @@ def configure_switch_engine(
         max_switches_per_hour=max_switches_per_hour,
         verify_timeout_seconds=verify_timeout_seconds,
     )
+
+
+def is_switch_in_progress() -> bool:
+    """Return True if a switch is currently executing. Thread-safe read."""
+    return _switch_in_progress
