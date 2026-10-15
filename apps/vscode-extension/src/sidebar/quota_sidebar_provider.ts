@@ -209,7 +209,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     .card.best { border-color:var(--accent); background:var(--accent-g); }
 
     .card-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:6px; }
-    .card-name { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px; }
+    .card-name { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px; display:flex; align-items:center; }
+    .active-badge { font-size:9px; font-weight:700; letter-spacing:0.06em; background:rgba(26,158,92,0.25); color:#4fa84f; border:1px solid rgba(79,168,79,0.4); padding:1px 5px; border-radius:3px; margin-left:6px; text-transform:uppercase; flex-shrink:0; }
     .card-actions { display:flex; gap:3px; flex-shrink:0; }
     .card-tag { font-size:10px; color:var(--muted); font-family:var(--mono); margin-bottom:6px; }
 
@@ -375,6 +376,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           <div class="card-head">
             <div class="card-name">
               <span class="dot \${dotCls(acc.status)}"></span>\${name}
+              \${acc.status === 'live' ? '<span class="active-badge">ACTIVE</span>' : ''}
             </div>
             <div class="card-actions">
               <button class="btn-icon edit-btn" data-id="\${acc.id}" title="Edit label">✏</button>
@@ -391,7 +393,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
               <button class="le-cancel" data-id="\${acc.id}">Cancel</button>
             </div>
           </div>
-          \${isBest ? '<button class="btn-switch" data-id="'+acc.id+'">⇄ Switch to this account</button>' : ''}
+          \${acc.status !== 'live' ? '<button class="btn-switch" data-id="'+acc.id+'">⇄ Switch to this account</button>' : ''}
         </div>\`;
       }).join('');
 

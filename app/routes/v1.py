@@ -209,8 +209,13 @@ def add_account_v1(item: Any) -> dict[str, Any]:
 
 
 @router.delete("/accounts/{account_id}", status_code=204, response_class=Response)
-def remove_account_v1(account_id: int) -> Response:
-    from app.services import delete_account
+def remove_account_v1(account_id: int, force: bool = Query(default=False)) -> Response:
+    from app.services import get_account_by_id, delete_account
+    acc = get_account_by_id(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    if acc.get("status") == "live" and not force:
+        raise HTTPException(400, "Active Account Protection: Cannot delete the currently active account. Switch accounts or sign out first.")
     deleted = delete_account(account_id)
     if not deleted:
         raise HTTPException(404, "Account not found")
@@ -664,6 +669,41 @@ def _points_to_csv_response(points: list[dict[str, Any]], filename: str) -> Resp
     )
 
 
+@router.get("/analytics/export")
+def export_all_analytics(
+    period: str = Query("7d", description="24h | 7d | 30d"),
+    format: str = Query("json", description="json | csv"),
+) -> Any:
+    """
+    Export quota history and analytics across all accounts as JSON or CSV.
+    GET /api/v1/analytics/export?period=7d&format=csv
+    """
+    from app.services.account_service import list_accounts
+    from app.utils.time import now_iso
+    all_points: list[dict[str, Any]] = []
+    accounts = list_accounts()
+    for acc in accounts:
+        pts = _history_for_account(acc["id"], period)
+        for p in pts:
+            row = {
+                "account_id": acc.get("account_id") or str(acc["id"]),
+                "email": acc.get("email", ""),
+                "provider": acc.get("provider", ""),
+                "display_name": acc.get("display_name", "") or acc.get("label", ""),
+                **p,
+            }
+            all_points.append(row)
+    if format == "csv":
+        return _history_to_csv_response(all_points, f"ai_quota_analytics_{period}.csv")
+    return {
+        "period": period,
+        "exported_at": now_iso(),
+        "total_accounts": len(accounts),
+        "total_snapshots": len(all_points),
+        "snapshots": all_points,
+    }
+
+
 # ─── Phase 15 — Predictions & Recommendations ─────────────────────────────
 
 @router.get("/predictions")
@@ -976,3 +1016,110 @@ def get_quota_matrix() -> dict[str, Any]:
         "total":        len(rows),
         "generated_at": now_iso(),
     }
+
+# ─── Phase C — Backup, Recovery & Vault Management ───────────────────────────
+
+class AccountImportItem(BaseModel):
+    email: str
+    provider: str = "Antigravity"
+    client: str = "Antigravity 2.0"
+    display_name: str | None = None
+    label: str | None = None
+    group_name: str | None = None
+    color: str | None = None
+    priority: int = 50
+    notes: str | None = None
+
+
+class AccountImportPayload(BaseModel):
+    accounts: list[AccountImportItem]
+
+
+@router.get("/accounts/backup/export")
+def export_accounts() -> dict[str, Any]:
+    """Export all registered accounts to a portable JSON backup format."""
+    from app.services.account_service import list_accounts
+    from app.utils.time import now_iso
+    accounts = list_accounts()
+    export_list = []
+    for acc in accounts:
+        export_list.append({
+            "account_id":   acc.get("account_id"),
+            "email":        acc.get("email"),
+            "provider":     acc.get("provider", "Antigravity"),
+            "client":       acc.get("client", "Antigravity 2.0"),
+            "display_name": acc.get("display_name"),
+            "label":        acc.get("label"),
+            "group_name":   acc.get("group_name"),
+            "color":        acc.get("color"),
+            "priority":     acc.get("priority", 50),
+            "notes":        acc.get("notes"),
+        })
+    return {
+        "schema": "ai-quota.accounts.backup.v1",
+        "version": 1,
+        "exported_at": now_iso(),
+        "total": len(export_list),
+        "accounts": export_list,
+    }
+
+
+@router.post("/accounts/backup/import")
+def import_accounts(payload: AccountImportPayload) -> dict[str, Any]:
+    """Import accounts from a portable JSON backup. Adds new accounts or updates existing labels."""
+    from app.services.account_service import list_accounts, create_account, update_account_labels
+    existing = {a.get("email", "").lower(): a for a in list_accounts()}
+    added = 0
+    updated = 0
+    for item in payload.accounts:
+        em = item.email.strip().lower()
+        if not em:
+            continue
+        if em in existing:
+            acc = existing[em]
+            update_account_labels(
+                acc["id"],
+                label=item.label,
+                group_name=item.group_name,
+                color=item.color,
+                notes=item.notes,
+            )
+            updated += 1
+        else:
+            try:
+                create_account(
+                    email=item.email.strip(),
+                    provider=item.provider.strip(),
+                    client=item.client.strip(),
+                    display_name=(item.display_name or item.label or item.email).strip(),
+                )
+                added += 1
+            except Exception:
+                pass
+    return {"ok": True, "added": added, "updated": updated, "total": added + updated}
+
+
+@router.post("/system/restart-backend")
+def restart_backend() -> dict[str, Any]:
+    """Terminate and reload the local language server process for clean recovery."""
+    from providers.antigravity.switcher import kill_antigravity_language_servers
+    from app.providers.antigravity_2 import _PROBE_CACHE, _WORKING_ENDPOINT
+    _PROBE_CACHE["expires"] = 0.0
+    _WORKING_ENDPOINT.update({"pid": None, "port": None, "csrf": None})
+    terminated = kill_antigravity_language_servers()
+    return {"ok": True, "message": "Language server restart initiated", "terminated": terminated}
+
+
+@router.post("/vault/purge")
+def purge_vault() -> dict[str, Any]:
+    """Purge all stored tokens and credentials from the local OS vault."""
+    from packages.security.credential_manager import get_credential_manager
+    from app.services.account_service import list_accounts
+    cm = get_credential_manager()
+    purged = 0
+    for acc in list_accounts():
+        acc_id = acc.get("account_id") or str(acc["id"])
+        if cm.has_credential(acc_id):
+            cm.delete(acc_id)
+            purged += 1
+    return {"ok": True, "purged": purged}

@@ -244,6 +244,153 @@ export function registerAllCommands(
     vscode.env.openExternal(vscode.Uri.parse(client.getDashboardUrl()));
     vscode.window.showInformationMessage("AI-Quota: Add accounts via the dashboard.");
   });
+
+  // ── Focus View ─────────────────────────────────────────────────────────────
+  reg("ai-quota.focusView", async () => {
+    try {
+      await vscode.commands.executeCommand("ai-quota.quotaView.focus");
+    } catch {
+      // fallback to focus sidebar container
+      await vscode.commands.executeCommand("workbench.view.extension.ai-quota-sidebar");
+    }
+  });
+
+  // ── Status Bar Menu ────────────────────────────────────────────────────────
+  reg("ai-quota.statusBarMenu", async () => {
+    await vscode.commands.executeCommand("ai-quota.switchAccount");
+  });
+
+  // ── Export Accounts ────────────────────────────────────────────────────────
+  reg("ai-quota.exportAccounts", async () => {
+    try {
+      const data = await client.exportAccounts();
+      const uri = await vscode.window.showSaveDialog({
+        filters: { "JSON Files": ["json"] },
+        defaultUri: vscode.Uri.file("ai-quota-accounts-backup.json"),
+        saveLabel: "Export Accounts",
+      });
+      if (!uri) return;
+      const content = Buffer.from(JSON.stringify(data, null, 2), "utf8");
+      await vscode.workspace.fs.writeFile(uri, content);
+      vscode.window.showInformationMessage(`AI-Quota: Successfully exported ${data.total} accounts to ${uri.fsPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-Quota: Failed to export accounts — ${String(err)}`);
+    }
+  });
+
+  // ── Import Accounts ────────────────────────────────────────────────────────
+  reg("ai-quota.importAccounts", async () => {
+    try {
+      const uris = await vscode.window.showOpenDialog({
+        filters: { "JSON Files": ["json"] },
+        canSelectMany: false,
+        openLabel: "Import Accounts",
+      });
+      if (!uris || !uris.length) return;
+      const fileBytes = await vscode.workspace.fs.readFile(uris[0]);
+      const json = JSON.parse(Buffer.from(fileBytes).toString("utf8"));
+      const accounts = Array.isArray(json) ? json : (json.accounts || []);
+      if (!accounts.length) {
+        vscode.window.showWarningMessage("AI-Quota: No accounts found in selected file.");
+        return;
+      }
+      const res = await client.importAccounts(accounts);
+      vscode.window.showInformationMessage(
+        `AI-Quota: Imported ${res.total} accounts (${res.added} added, ${res.updated} updated).`
+      );
+      ctx.accountsProvider.refresh();
+      ctx.quotaSidebarProvider.refresh();
+      ctx.statusBar?.refresh();
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-Quota: Failed to import accounts — ${String(err)}`);
+    }
+  });
+
+  // ── Export Analytics ───────────────────────────────────────────────────────
+  reg("ai-quota.exportAnalytics", async () => {
+    const period = await vscode.window.showQuickPick(
+      [
+        { label: "7d", description: "Past 7 days (Recommended)" },
+        { label: "24h", description: "Past 24 hours" },
+        { label: "30d", description: "Past 30 days" },
+      ],
+      { title: "AI-Quota: Select Analytics Period" }
+    );
+    if (!period) return;
+
+    const format = await vscode.window.showQuickPick(
+      [
+        { label: "json", description: "JSON format (full structure)" },
+        { label: "csv", description: "CSV format (table / spreadsheet)" },
+      ],
+      { title: "AI-Quota: Select Export Format" }
+    );
+    if (!format) return;
+
+    try {
+      const uri = await vscode.window.showSaveDialog({
+        filters: format.label === "csv" ? { "CSV Files": ["csv"] } : { "JSON Files": ["json"] },
+        defaultUri: vscode.Uri.file(`ai-quota-analytics-${period.label}.${format.label}`),
+        saveLabel: "Export Analytics",
+      });
+      if (!uri) return;
+
+      const contentStr = await client.exportAnalytics(period.label, format.label);
+      const content = Buffer.from(contentStr, "utf8");
+      await vscode.workspace.fs.writeFile(uri, content);
+      vscode.window.showInformationMessage(`AI-Quota: Analytics exported to ${uri.fsPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-Quota: Export error — ${String(err)}`);
+    }
+  });
+
+  // ── Restart Backend Process ────────────────────────────────────────────────
+  reg("ai-quota.restartBackend", async () => {
+    const confirmed = await vscode.window.showWarningMessage(
+      "Restart local Antigravity Language Server / backend process? Active completions will briefly pause.",
+      { modal: true },
+      "Restart Process"
+    );
+    if (confirmed !== "Restart Process") return;
+
+    try {
+      const res = await client.restartBackend();
+      vscode.window.showInformationMessage(
+        res.terminated
+          ? "AI-Quota: Antigravity language server process terminated and reloading."
+          : "AI-Quota: Restart signal processed (no active server process needed termination)."
+      );
+      ctx.statusBar?.refresh();
+      ctx.quotaSidebarProvider.refresh();
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-Quota: Restart failed — ${String(err)}`);
+    }
+  });
+
+  // ── Clear Token Vault ──────────────────────────────────────────────────────
+  reg("ai-quota.clearTokenVault", async () => {
+    const confirmed = await vscode.window.showWarningMessage(
+      "Clear stored encrypted tokens from the local OS Token Vault? You will need to re-authenticate accounts.",
+      { modal: true },
+      "Purge Vault"
+    );
+    if (confirmed !== "Purge Vault") return;
+
+    try {
+      const res = await client.purgeVault();
+      vscode.window.showInformationMessage(`AI-Quota: Token vault cleared (${res.purged} credentials removed).`);
+      ctx.accountsProvider.refresh();
+      ctx.quotaSidebarProvider.refresh();
+      ctx.statusBar?.refresh();
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-Quota: Purge failed — ${String(err)}`);
+    }
+  });
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+  reg("ai-quota.openSettings", () => {
+    vscode.commands.executeCommand("workbench.action.openSettings", "ai-quota");
+  });
 }
 
 /** Build the full quota matrix HTML for the webview panel. */

@@ -105,7 +105,12 @@ def add_account(item: AccountIn) -> dict[str, Any]:
 
 
 @app.delete("/api/accounts/{account_id}", status_code=204, response_class=Response)
-def remove_account(account_id: int) -> Response:
+def remove_account(account_id: int, force: bool = Query(default=False)) -> Response:
+    acc = get_account_by_id(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    if acc.get("status") == "live" and not force:
+        raise HTTPException(400, "Active Account Protection: Cannot delete the currently active account. Switch accounts or sign out first.")
     deleted = delete_account(account_id)
     if not deleted:
         raise HTTPException(404, "Account not found")

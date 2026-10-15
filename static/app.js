@@ -513,7 +513,7 @@
           <div class="account-foot">
             <span>Last sync: ${esc(lastSeen)}</span>
             <div class="account-foot-actions">
-              <button class="button danger-outline delete-account" data-id="${account.id}">Delete</button>
+              <button class="button danger-outline delete-account" data-id="${account.id}" ${status === 'live' ? 'disabled title="Active account protected: switch accounts or sign out first"' : ''}>Delete</button>
               <button class="button${actionClass} connect" data-id="${account.id}" data-kind="${kind}" ${connect.enabled ? '' : 'disabled'}>${connect.text}</button>
             </div>
           </div>

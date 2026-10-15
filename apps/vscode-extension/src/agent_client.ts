@@ -170,6 +170,27 @@ export class AgentClient {
     }
   }
 
+  private async fetchText(path: string, options?: RequestInit): Promise<string> {
+    const url = `${this.baseUrl}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+    try {
+      const response = await globalThis.fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...options?.headers,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} from ${path}`);
+      }
+      return await response.text();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async isAgentRunning(): Promise<boolean> {
     try {
       await this.fetch("/api/v1/health");
@@ -275,4 +296,28 @@ export class AgentClient {
     const qs = provider ? `?provider=${encodeURIComponent(provider)}` : "";
     return this.fetch<MatrixData>(`/api/v1/matrix${qs}`);
   }
+
+  async exportAccounts(): Promise<{ schema: string; version: number; accounts: any[]; total: number }> {
+    return this.fetch("/api/v1/accounts/backup/export");
+  }
+
+  async importAccounts(accounts: any[]): Promise<{ ok: boolean; added: number; updated: number; total: number }> {
+    return this.fetch("/api/v1/accounts/backup/import", {
+      method: "POST",
+      body: JSON.stringify({ accounts }),
+    });
+  }
+
+  async restartBackend(): Promise<{ ok: boolean; message: string; terminated: boolean }> {
+    return this.fetch("/api/v1/system/restart-backend", { method: "POST" });
+  }
+
+  async purgeVault(): Promise<{ ok: boolean; purged: number }> {
+    return this.fetch("/api/v1/vault/purge", { method: "POST" });
+  }
+
+  async exportAnalytics(period = "7d", format = "json"): Promise<string> {
+    return this.fetchText(`/api/v1/analytics/export?period=${encodeURIComponent(period)}&format=${encodeURIComponent(format)}`);
+  }
 }
+

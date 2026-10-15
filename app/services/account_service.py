@@ -168,3 +168,31 @@ def update_account_telemetry(
             """,
             (status, plan_tier, last_seen_at, last_error, credits_remaining, account_id),
         )
+
+
+def update_account_labels(
+    account_id: int,
+    label: str | None = None,
+    group_name: str | None = None,
+    color: str | None = None,
+    notes: str | None = None,
+    priority: int | None = None,
+) -> None:
+    updates: dict[str, Any] = {}
+    if label is not None:
+        updates["label"] = label
+    if group_name is not None:
+        updates["group_name"] = group_name
+    if color is not None:
+        updates["color"] = color
+    if notes is not None:
+        updates["notes"] = notes
+    if priority is not None:
+        updates["priority"] = priority
+    if not updates:
+        return
+    set_clause = ", ".join(f"{k}=?" for k in updates)
+    vals = list(updates.values()) + [account_id]
+    with db_session() as conn:
+        conn.execute(f"UPDATE accounts SET {set_clause} WHERE id=?", vals)
+

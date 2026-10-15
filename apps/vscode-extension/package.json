@@ -115,6 +115,50 @@
             {
                 "command": "ai-quota.addAccount",
                 "title": "AI-Quota: Add Account"
+            },
+            {
+                "command": "ai-quota.focusView",
+                "title": "AI-Quota: Focus View"
+            },
+            {
+                "command": "ai-quota.statusBarMenu",
+                "title": "AI-Quota: Status Bar Menu"
+            },
+            {
+                "command": "ai-quota.exportAccounts",
+                "title": "AI-Quota: Export Saved Accounts..."
+            },
+            {
+                "command": "ai-quota.importAccounts",
+                "title": "AI-Quota: Import Saved Accounts..."
+            },
+            {
+                "command": "ai-quota.exportAnalytics",
+                "title": "AI-Quota: Export Quota Analytics..."
+            },
+            {
+                "command": "ai-quota.restartBackend",
+                "title": "AI-Quota: Restart Backend Process"
+            },
+            {
+                "command": "ai-quota.clearTokenVault",
+                "title": "AI-Quota: Clear Stored Token Vault..."
+            },
+            {
+                "command": "ai-quota.openSettings",
+                "title": "AI-Quota: Settings"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "ai-quota.statusBarMenu",
+                "key": "alt+a",
+                "mac": "alt+a"
+            },
+            {
+                "command": "ai-quota.refresh",
+                "key": "alt+shift+a",
+                "mac": "alt+shift+a"
             }
         ],
         "menus": {
@@ -151,6 +195,30 @@
                 },
                 {
                     "command": "ai-quota.addAccount"
+                },
+                {
+                    "command": "ai-quota.focusView"
+                },
+                {
+                    "command": "ai-quota.statusBarMenu"
+                },
+                {
+                    "command": "ai-quota.exportAccounts"
+                },
+                {
+                    "command": "ai-quota.importAccounts"
+                },
+                {
+                    "command": "ai-quota.exportAnalytics"
+                },
+                {
+                    "command": "ai-quota.restartBackend"
+                },
+                {
+                    "command": "ai-quota.clearTokenVault"
+                },
+                {
+                    "command": "ai-quota.openSettings"
                 }
             ]
         },

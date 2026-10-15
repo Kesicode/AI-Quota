@@ -327,5 +327,54 @@ class V1ApiTestCase(unittest.TestCase):
         body = r.json()
         self.assertEqual(body["total"], len(body["accounts"]))
 
+
+    def test_backup_export_and_import(self) -> None:
+        self.client.post("/api/accounts", json={
+            "email": "backup_user@example.com", "provider": "Antigravity", "client": "Antigravity"
+        })
+        export_r = self.client.get("/api/v1/accounts/backup/export")
+        self.assertEqual(export_r.status_code, 200)
+        data = export_r.json()
+        self.assertEqual(data["schema"], "ai-quota.accounts.backup.v1")
+        self.assertGreaterEqual(data["total"], 1)
+
+        # Import
+        import_r = self.client.post("/api/v1/accounts/backup/import", json={"accounts": [
+            {"email": "backup_user@example.com", "provider": "Antigravity", "client": "Antigravity", "label": "Imported Label"},
+            {"email": "new_user@example.com", "provider": "Antigravity", "client": "Antigravity", "label": "New Account"}
+        ]})
+        self.assertEqual(import_r.status_code, 200)
+        res = import_r.json()
+        self.assertTrue(res["ok"])
+        self.assertGreaterEqual(res["total"], 2)
+
+    def test_analytics_export_json_and_csv(self) -> None:
+        r_json = self.client.get("/api/v1/analytics/export?period=7d&format=json")
+        self.assertEqual(r_json.status_code, 200)
+        self.assertIn("snapshots", r_json.json())
+
+        r_csv = self.client.get("/api/v1/analytics/export?period=7d&format=csv")
+        self.assertEqual(r_csv.status_code, 200)
+        self.assertIn("text/", r_csv.headers.get("content-type", ""))
+
+    def test_active_account_protection(self) -> None:
+        # Create an account and mark it live in database
+        acc = self.client.post("/api/accounts", json={
+            "email": "active_protect@example.com", "provider": "Antigravity", "client": "Antigravity"
+        }).json()
+        acc_id = acc["id"]
+        from app.database import db_session
+        with db_session() as conn:
+            conn.execute("UPDATE accounts SET status = 'live' WHERE id = ?", (acc_id,))
+
+        # Attempt to delete without force -> 400
+        del_r = self.client.delete(f"/api/v1/accounts/{acc_id}")
+        self.assertEqual(del_r.status_code, 400)
+        self.assertIn("Active Account Protection", del_r.json()["detail"])
+
+        # Attempt to delete with force=True -> 204
+        del_force = self.client.delete(f"/api/v1/accounts/{acc_id}?force=true")
+        self.assertEqual(del_force.status_code, 204)
+
 if __name__ == "__main__":
     unittest.main()

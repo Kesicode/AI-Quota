@@ -8,7 +8,7 @@
 
 Manage, monitor, predict, and switch multiple AI accounts across Google Antigravity, Gemini API, GitHub Copilot, OpenAI Codex, and Google Cloud — from a dedicated IDE extension and local-first dashboard.
 
-[![Tests](https://img.shields.io/badge/tests-59%2F59%20passing-brightgreen?style=flat-square&logo=pytest)](tests/)
+[![Tests](https://img.shields.io/badge/tests-62%2F62%20passing-brightgreen?style=flat-square&logo=pytest)](tests/)
 [![Extension](https://img.shields.io/badge/extension-v2.0.0-blue?style=flat-square&logo=visual-studio-code)](apps/vscode-extension/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python)](https://python.org)
@@ -84,15 +84,21 @@ All commands are accessible from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shif
 
 | Command | Shortcut | Description |
 |---|---|---|
+| `AI-Quota: Focus View` | — | Opens and focuses the sidebar quota dashboard |
+| `AI-Quota: Status Bar Menu` | `Alt+A` | Quick account switcher sorted by highest remaining quota |
+| `AI-Quota: Refresh Quota` | `Alt+Shift+A` | Manually triggers provider sync and updates telemetry |
+| `AI-Quota: Quota Matrix (All Accounts)` | — | Opens full-screen cross-provider comparison matrix webview |
+| `AI-Quota: Switch Account` | — | Switch active session to a saved account with safety confirmation |
+| `AI-Quota: Clear Stored Token Vault...` | — | Purge encrypted credentials from Secret Storage / DPAPI |
+| `AI-Quota: Export Saved Accounts...` | — | Export saved accounts to portable JSON backup |
+| `AI-Quota: Import Saved Accounts...` | — | Import accounts from JSON backup file |
+| `AI-Quota: Export Quota Analytics...` | — | Export quota history and analytics to CSV or JSON |
+| `AI-Quota: Restart Backend Process` | — | Terminate and reload the local language server process |
 | `AI-Quota: Open Dashboard` | — | Opens the full browser-based dashboard (`http://127.0.0.1:8765`) |
-| `AI-Quota: Switch Account` | `Alt+A` | Quick-pick account switcher sorted by highest remaining quota |
-| `AI-Quota: Show Quota Matrix` | — | Opens full-screen cross-provider comparison matrix webview |
-| `AI-Quota: Sync Quota Data` | `Alt+Shift+A` | Manually triggers provider sync and updates telemetry |
 | `AI-Quota: Show Status` | — | Displays current active account and quota breakdown notification |
 | `AI-Quota: Save Current Account` | — | Registers and stores an account into the local registry |
 | `AI-Quota: Show Diagnostics` | — | Inspects agent health, SQLite database info, and provider status |
-| `AI-Quota: Sign In / Re-authenticate` | — | Opens authentication flow for new provider credentials |
-| `AI-Quota: Sign Out` | — | Safely detaches account session from local registry |
+| `AI-Quota: Settings` | — | Open AI-Quota extension settings |
 
 ---
 
