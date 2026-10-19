@@ -14,9 +14,6 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
     steps:
       - name: Checkout Repository
@@ -44,32 +41,36 @@ jobs:
           cd apps/vscode-extension
           npx @vscode/vsce package --no-dependencies --out ../../ai-quota.vsix
 
-      - name: Extract Extension Version
-        id: ext_version
-        run: |
-          VERSION=$(node -p "require('./apps/vscode-extension/package.json').version")
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-
+      # ──────────────────────────────────────────────────────────────
+      # GitHub Release – only runs when triggered by a real git tag
+      # Skipped silently on manual workflow_dispatch (no tag present)
+      # ──────────────────────────────────────────────────────────────
       - name: Upload VSIX to GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
-        continue-on-error: true
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: ${{ steps.ext_version.outputs.tag }}
-          name: Release ${{ steps.ext_version.outputs.tag }}
           files: ai-quota.vsix
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ──────────────────────────────────────────────────────────────
+      # Open VSX – always runs when secret exists (fixes skip bug)
+      # ──────────────────────────────────────────────────────────────
+      - name: Publish to Open VSX Registry (Antigravity IDE, Cursor, VSCodium)
+        if: ${{ secrets.OVSX_PAT != '' }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          npx ovsx publish ai-quota.vsix -p "$OVSX_PAT"
+
+      # ──────────────────────────────────────────────────────────────
+      # VS Code Marketplace – runs when secret exists
+      # ──────────────────────────────────────────────────────────────
       - name: Publish to VS Code Marketplace
-        if: env.VSCE_PAT != ''
+        if: ${{ secrets.VSCE_PAT != '' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           cd apps/vscode-extension
-          npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }} --no-dependencies
-
-      - name: Publish to Open VSX Registry (Antigravity IDE, Cursor, VSCodium)
-        if: env.OVSX_PAT != ''
-        run: |
-          npx ovsx publish ai-quota.vsix -p ${{ secrets.OVSX_PAT }}
-
+          npx @vscode/vsce publish -p "$VSCE_PAT" --no-dependencies
