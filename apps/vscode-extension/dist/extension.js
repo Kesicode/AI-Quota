@@ -588,7 +588,7 @@ Alt+Q = Quick Quota View`,this.item.backgroundColor=void 0)}dispose(){this._disp
       <button class="pill-btn" id="thresholdPill" title="Open settings to change low quota alert threshold">\u26A0 20%</button>
       <button class="pill-btn" id="autoSwitchPill" title="Toggle automatic switching on low quota">\u26A1 Auto: OFF</button>
     </div>
-    <span class="footer-version" id="footerVersion">v2.0.4</span>
+    <span class="footer-version" id="footerVersion">v2.0.5</span>
   </div>
 
   <script nonce="${e}">
