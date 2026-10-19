@@ -2,7 +2,7 @@
     "name": "ai-quota",
     "displayName": "AI-Quota",
     "description": "Universal AI Account & Quota Manager — monitor quotas, manage accounts, and switch between AI providers directly from your IDE.",
-    "version": "2.0.1",
+    "version": "2.0.3",
     "publisher": "Kesicode",
     "license": "MIT",
     "homepage": "https://github.com/Kesicode/AI-Quota#readme",
@@ -149,6 +149,11 @@
             {
                 "command": "ai-quota.openSettings",
                 "title": "AI-Quota: Settings"
+            },
+            {
+                "command": "ai-quota.showQuotaQuickPick",
+                "title": "AI-Quota: Quick Quota View (QuickPick)",
+                "icon": "$(pulse)"
             }
         ],
         "keybindings": [
@@ -161,6 +166,11 @@
                 "command": "ai-quota.refresh",
                 "key": "alt+shift+a",
                 "mac": "alt+shift+a"
+            },
+            {
+                "command": "ai-quota.showQuotaQuickPick",
+                "key": "alt+q",
+                "mac": "alt+q"
             }
         ],
         "menus": {
@@ -221,6 +231,9 @@
                 },
                 {
                     "command": "ai-quota.openSettings"
+                },
+                {
+                    "command": "ai-quota.showQuotaQuickPick"
                 }
             ]
         },

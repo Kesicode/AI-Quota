@@ -387,6 +387,172 @@ export function registerAllCommands(
     }
   });
 
+  // ── QuickPick Quota View ────────────────────────────────────────────────────
+  reg("ai-quota.showQuotaQuickPick", async () => {
+    let accounts: AccountData[];
+    try {
+      accounts = await client.getAccounts();
+    } catch {
+      vscode.window.showErrorMessage("AI-Quota: Agent offline — cannot show quota.");
+      return;
+    }
+
+    if (!accounts.length) {
+      vscode.window.showInformationMessage("AI-Quota: No accounts registered.");
+      return;
+    }
+
+    const qp = vscode.window.createQuickPick();
+    qp.title = "AI-Quota — Quota Overview";
+    qp.placeholder = "Select account to switch to, or press Escape to close";
+    qp.matchOnDescription = true;
+    qp.matchOnDetail = true;
+
+    function buildItems(accs: AccountData[]) {
+      const items: vscode.QuickPickItem[] = [];
+      const sorted = [...accs].sort((a, b) => {
+        if (a.status === "live" && b.status !== "live") return -1;
+        if (b.status === "live" && a.status !== "live") return 1;
+        return (b.best_remaining ?? 0) - (a.best_remaining ?? 0);
+      });
+
+      for (const acc of sorted) {
+        const isActive = acc.status === "live";
+        const name = acc.label || acc.display_name || acc.email || `Account ${acc.id}`;
+        const rem = acc.best_remaining;
+        const remStr = rem != null ? `${rem.toFixed(0)}%` : "?%";
+
+        // Bar visualization (10 chars)
+        const barLen = 12;
+        const filled = rem != null ? Math.round((rem / 100) * barLen) : 0;
+        const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+
+        const statusIcon = isActive ? "$(check)" :
+          (acc.status === "stale" ? "$(warning)" : "$(circle-outline)");
+
+        // Per-model rows from snapshots
+        const snapshots = acc.snapshots || [];
+
+        items.push({
+          label: `${statusIcon} ${name}`,
+          description: `${bar}  ${remStr}  •  ${acc.provider}`,
+          detail: isActive ? "  ✦ Currently active account" :
+            (acc.email && acc.email !== name ? `  ${acc.email}` : undefined),
+          alwaysShow: true,
+        } as vscode.QuickPickItem & { _accountId?: number; _isAccount?: boolean });
+
+        // Per-model sub-items
+        for (const s of snapshots.slice(0, 4)) {
+          const pct = s.remaining_percent ?? 0;
+          const filledM = Math.round((pct / 100) * 8);
+          const barM = "▪".repeat(filledM) + "·".repeat(8 - filledM);
+          const wname = s.window_name || s.quota_bucket || "Usage";
+
+          // Countdown
+          let cntdn = "";
+          if (s.reset_at) {
+            const diff = new Date(s.reset_at).getTime() - Date.now();
+            if (diff > 0) {
+              const h = Math.floor(diff / 3600000);
+              const m = Math.floor((diff % 3600000) / 60000);
+              cntdn = h > 0 ? `${h}h ${m}m` : `${m}m`;
+            }
+          }
+
+          const pctIcon = pct <= 10 ? "$(error)" : pct <= 25 ? "$(warning)" : "$(check)";
+
+          items.push({
+            label: `    ${pctIcon}  ${wname}`,
+            description: `${barM}  ${pct.toFixed(0)}%${cntdn ? "  ↺ " + cntdn : ""}`,
+            detail: undefined,
+            alwaysShow: true,
+          });
+        }
+
+        if (!isActive) {
+          items.push({
+            label: `    $(arrow-right) Switch to "${name}"`,
+            description: "",
+            alwaysShow: true,
+          });
+        }
+
+        // Separator
+        items.push({ label: "", kind: vscode.QuickPickItemKind.Separator } as vscode.QuickPickItem);
+      }
+
+      return items;
+    }
+
+    qp.items = buildItems(accounts);
+
+    // Header buttons
+    qp.buttons = [
+      { iconPath: new vscode.ThemeIcon("refresh"), tooltip: "Refresh quota" },
+      { iconPath: new vscode.ThemeIcon("dashboard"), tooltip: "Open Dashboard" },
+      { iconPath: new vscode.ThemeIcon("gear"), tooltip: "Settings" },
+    ];
+
+    qp.onDidTriggerButton(async (btn) => {
+      if ((btn as vscode.QuickInputButton & { tooltip?: string }).tooltip === "Refresh quota") {
+        try {
+          await client.sync();
+          accounts = await client.getAccounts();
+          qp.items = buildItems(accounts);
+          ctx.quotaSidebarProvider.refresh();
+        } catch {
+          vscode.window.showErrorMessage("AI-Quota: Refresh failed.");
+        }
+      } else if ((btn as vscode.QuickInputButton & { tooltip?: string }).tooltip === "Open Dashboard") {
+        vscode.env.openExternal(vscode.Uri.parse(client.getDashboardUrl()));
+        qp.hide();
+      } else if ((btn as vscode.QuickInputButton & { tooltip?: string }).tooltip === "Settings") {
+        vscode.commands.executeCommand("workbench.action.openSettings", "ai-quota");
+        qp.hide();
+      }
+    });
+
+    qp.onDidChangeSelection(async (selected) => {
+      if (!selected.length) return;
+      const item = selected[0];
+      // Check if it's a "Switch to" item
+      if (item.label.includes("$(arrow-right) Switch to")) {
+        qp.hide();
+        // Find account by name in label
+        const match = item.label.match(/Switch to "(.+?)"/);
+        if (match) {
+          const targetName = match[1];
+          const target = accounts.find(
+            a => (a.label || a.display_name || a.email || `Account ${a.id}`) === targetName
+          );
+          if (target) {
+            await vscode.window.withProgress(
+              { location: vscode.ProgressLocation.Notification, title: `AI-Quota: Switching to ${targetName}…`, cancellable: false },
+              async () => {
+                try {
+                  const result = await client.switchAccount(target.id);
+                  if (result.status === "success" && result.verified) {
+                    vscode.window.showInformationMessage(`✓ Switched to ${targetName}`);
+                  } else {
+                    vscode.window.showWarningMessage(`⚠ Switch result: ${result.reason}`);
+                  }
+                  ctx.statusBar?.refresh();
+                  ctx.accountsProvider.refresh();
+                  ctx.quotaSidebarProvider.refresh();
+                } catch (err) {
+                  vscode.window.showErrorMessage(`AI-Quota: Switch error — ${String(err)}`);
+                }
+              }
+            );
+          }
+        }
+      }
+    });
+
+    qp.onDidHide(() => qp.dispose());
+    qp.show();
+  });
+
   // ── Settings ───────────────────────────────────────────────────────────────
   reg("ai-quota.openSettings", () => {
     vscode.commands.executeCommand("workbench.action.openSettings", "ai-quota");

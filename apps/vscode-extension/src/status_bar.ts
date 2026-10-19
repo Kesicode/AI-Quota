@@ -1,11 +1,15 @@
 /**
- * AI-Quota Status Bar Item
+ * AI-Quota Status Bar Item — v2
  *
- * Shows: "AI-Quota 84% · 1h42m" — click opens quick account switcher.
+ * Inspired by vscode-antigravity-cockpit's 6-format status bar:
+ *   - Default: "$(pulse) 84% · 1h42m"
+ *   - Respects ai-quota.statusBarFormat config string
+ *   - Click: opens QuickPick quota view (Alt+Q)
+ *   - Tooltip: shows all accounts summary
  * Color coding:
- *   - Green  (> 50%): normal
- *   - Yellow (20–50%): warning
- *   - Red    (< 20%): critical
+ *   - Green (>50%): normal
+ *   - Yellow (20-50%): warning
+ *   - Red (<20%): critical
  */
 
 import * as vscode from "vscode";
@@ -22,8 +26,9 @@ export class QuotaStatusBar implements vscode.Disposable {
       vscode.StatusBarAlignment.Right,
       100
     );
-    this.item.command = "ai-quota.switchAccount";
-    this.item.tooltip = "AI-Quota — click to switch account";
+    // Use QuickPick view for instant quota overview
+    this.item.command = "ai-quota.showQuotaQuickPick";
+    this.item.tooltip = "AI-Quota — click for quota overview (Alt+Q)";
     context.subscriptions.push(this.item);
   }
 
@@ -46,11 +51,46 @@ export class QuotaStatusBar implements vscode.Disposable {
 
       const remaining = best.best_remaining ?? 0;
       const resetText = this._nextReset(best);
-      const label = best.label || best.display_name || best.email;
+      const label = best.label || best.display_name || best.email || "Account";
 
-      const icon = remaining > 50 ? "$(pulse)" : remaining > 20 ? "$(warning)" : "$(error)";
-      this.item.text = `${icon} ${remaining.toFixed(0)}%${resetText ? ` · ${resetText}` : ""}`;
-      this.item.tooltip = `AI-Quota: ${label} — ${remaining.toFixed(1)}% remaining\n${resetText ? `Resets in: ${resetText}` : ""}`;
+      // Format string from config
+      const config = vscode.workspace.getConfiguration("ai-quota");
+      const fmt = config.get<string>("statusBarFormat", "$(pulse) AI-Quota {percent}% · {reset}");
+
+      const icon = remaining > 50 ? "$(pulse)" : remaining > 25 ? "$(warning)" : "$(error)";
+
+      let text = fmt
+        .replace("{percent}", remaining.toFixed(0))
+        .replace("{reset}", resetText || "—")
+        .replace("{account}", label.slice(0, 12))
+        .replace("{provider}", best.provider || "")
+        .replace("$(pulse)", icon);
+
+      // If format still has the default pulse icon placeholder, replace it
+      if (!fmt.includes("{percent}") && !fmt.includes("$(pulse)")) {
+        text = `${icon} ${remaining.toFixed(0)}%${resetText ? ` · ${resetText}` : ""}`;
+      }
+
+      this.item.text = text;
+
+      // Rich tooltip: all accounts summary
+      const lines: string[] = [
+        `AI-Quota — Active: ${label}`,
+        `Remaining: ${remaining.toFixed(1)}%${resetText ? ` | Reset in: ${resetText}` : ""}`,
+        "",
+        "All accounts:",
+      ];
+      for (const acc of accounts.slice(0, 5)) {
+        const r = acc.best_remaining;
+        const n = acc.label || acc.display_name || acc.email || `#${acc.id}`;
+        const isLive = acc.status === "live";
+        lines.push(`  ${isLive ? "●" : "○"} ${n}: ${r != null ? r.toFixed(0) + "%" : "?"}`);
+      }
+      if (accounts.length > 5) {
+        lines.push(`  … and ${accounts.length - 5} more`);
+      }
+      lines.push("", "Alt+Q = Quick Quota View | Alt+A = Switch Account");
+      this.item.tooltip = lines.join("\n");
 
       // Color coding
       if (remaining <= 10) {
@@ -68,7 +108,7 @@ export class QuotaStatusBar implements vscode.Disposable {
   setOffline(): void {
     if (this._disposed) return;
     this.item.text = "$(circle-slash) AI-Quota";
-    this.item.tooltip = "AI-Quota agent offline — start with: python -m app.main";
+    this.item.tooltip = "AI-Quota agent offline\nStart with: python -m app.main\nAlt+Q = Quick Quota View";
     this.item.backgroundColor = undefined;
   }
 
@@ -88,7 +128,6 @@ export class QuotaStatusBar implements vscode.Disposable {
   }
 
   private _nextReset(account: AccountData): string {
-    // Find the earliest reset time across all snapshots
     const resets = account.snapshots
       .map((s) => s.reset_at)
       .filter((r): r is string => !!r)
