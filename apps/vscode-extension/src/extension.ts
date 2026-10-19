@@ -69,7 +69,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await statusBar?.refresh();
       accountsProvider.refresh();
       providersProvider.refresh();
-      quotaSidebarProvider.refresh();
+      await quotaSidebarProvider.refresh();
 
       const cfg = vscode.workspace.getConfiguration("ai-quota");
       const threshold = cfg.get<number>("notificationThreshold", 20);
@@ -79,6 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await checkLowQuotaNotifications(agentClient!, threshold, context, autoSwitch, cooldownMin, statusBar);
     } catch {
       statusBar?.setOffline();
+      quotaSidebarProvider.setOffline();
     }
   };
 
@@ -86,11 +87,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const slowSync = async () => {
     try {
       await agentClient!.sync();
-      await fastRefresh();
     } catch {
-      statusBar?.setOffline();
+      // best-effort sync
     }
+    await fastRefresh();
   };
+
+  // Check if backend is running; attempt background auto-launch if not
+  try {
+    const isRunning = await agentClient.isAgentRunning();
+    if (!isRunning) {
+      const cp = await import("child_process");
+      const sub = cp.spawn("python", ["-m", "app.main"], {
+        cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || undefined,
+        detached: true,
+        stdio: "ignore",
+      });
+      sub.unref();
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  } catch {
+    // best-effort auto-launch
+  }
 
   // Initial sync + refresh
   await slowSync();

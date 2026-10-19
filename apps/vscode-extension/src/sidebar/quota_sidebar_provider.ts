@@ -100,6 +100,10 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           await vscode.commands.executeCommand("ai-quota.signOut");
           break;
 
+        case "startBackend":
+          await vscode.commands.executeCommand("ai-quota.startBackend");
+          break;
+
         case "openSettings":
           await vscode.commands.executeCommand("ai-quota.openSettings");
           break;
@@ -242,8 +246,13 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         lastRefresh: this._lastRefresh?.toISOString() ?? null,
       });
     } catch {
-      this._view!.webview.postMessage({ type: "error", message: "Agent offline" });
+      this.setOffline();
     }
+  }
+
+  setOffline(): void {
+    if (!this._view) return;
+    this._view.webview.postMessage({ type: "error", message: "Agent offline" });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -839,7 +848,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       <button class="pill-btn" id="thresholdPill" title="Open settings to change low quota alert threshold">⚠ 20%</button>
       <button class="pill-btn" id="autoSwitchPill" title="Toggle automatic switching on low quota">⚡ Auto: OFF</button>
     </div>
-    <span class="footer-version" id="footerVersion">v2.0.5</span>
+    <span class="footer-version" id="footerVersion">v2.0.6</span>
   </div>
 
   <script nonce="${nonce}">
@@ -1347,12 +1356,16 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     function renderOffline() {
       const dot = document.getElementById('statusDot');
       dot.className = 'status-dot offline pulsing';
-      document.getElementById('statusText').textContent = 'Offline';
+      document.getElementById('statusText').textContent = 'Disconnected';
       document.getElementById('currentAccount').innerHTML =
-        \`<div class="offline-banner">⚠ AI-Quota agent offline<br><code>python -m app.main</code>
-        <br><button class="btn-restart" onclick="vscode.postMessage({command:'refresh'})">↻ Retry</button></div>\`;
+        \`<div class="offline-banner">
+          <strong>⚠ Local Engine Offline</strong><br>
+          <span style="font-size:10px;opacity:0.85;display:block;margin:4px 0 8px;">The AI-Quota local agent at <code>127.0.0.1:8765</code> is not running.</span>
+          <button class="btn-restart" onclick="vscode.postMessage({command:'startBackend'})">▶ Start Backend</button>
+          <button class="btn-restart" style="margin-left:6px;background:var(--surface2);color:var(--fg);border-color:var(--border)" onclick="vscode.postMessage({command:'refresh'})">↻ Retry</button>
+        </div>\`;
       document.getElementById('modelList').innerHTML =
-        '<div class="model-card"><div class="empty" style="padding:10px 0;font-size:10px">Agent not running</div></div>';
+        '<div class="model-card"><div class="empty" style="padding:10px 0;font-size:10px">Agent not running — click Start Backend above</div></div>';
       document.getElementById('accountsList').innerHTML = '';
     }
 
@@ -1378,6 +1391,9 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         renderOffline();
       }
     });
+
+    // Request initial data immediately on mount
+    vscode.postMessage({ command: 'refresh' });
   </script>
 </body>
 </html>`;

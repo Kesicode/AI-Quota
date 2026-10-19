@@ -44,13 +44,47 @@ def _powershell_json(script: str) -> Any:
 
 
 def _discover_desktop_servers() -> list[dict[str, Any]]:
+    servers: list[dict[str, Any]] = []
+    # Primary: fast psutil inspection (<0.08s)
+    try:
+        import psutil
+        import re
+
+        for p in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                cmd = " ".join(p.info["cmdline"] or [])
+                if not cmd:
+                    continue
+                cmd_lower = cmd.lower()
+                if ("language_server" in cmd_lower or "language-server" in cmd_lower) and "antigravity" in cmd_lower:
+                    csrf = None
+                    m = re.search(r'--csrf_token(?:=|\s+)(?:"([^"]+)"|([^\s]+))', cmd, re.I)
+                    if m:
+                        csrf = m.group(1) or m.group(2)
+                    ext_port = None
+                    m2 = re.search(r'--extension_server_port(?:=|\s+)(\d+)', cmd, re.I)
+                    if m2:
+                        ext_port = int(m2.group(1))
+                    servers.append({
+                        "pid": p.info["pid"],
+                        "command": cmd,
+                        "csrf": csrf,
+                        "extension_server_port": ext_port,
+                    })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        if servers:
+            return servers
+    except Exception:
+        pass
+
+    # Fallback: PowerShell if psutil is unavailable
     script = r'''
 $items = Get-CimInstance Win32_Process |
   Where-Object {
     $_.CommandLine -and
     $_.CommandLine -match '(?i)language_server|language-server' -and
-    $_.CommandLine -match '(?i)antigravity' -and
-    $_.CommandLine -match '(?i)--app_data_dir(?:\s+|=)"?antigravity"?(?:\s|$)'
+    $_.CommandLine -match '(?i)antigravity'
   } |
   ForEach-Object {
     $cmd = [string]$_.CommandLine
@@ -66,16 +100,35 @@ $items = Get-CimInstance Win32_Process |
 '''
     try:
         data = _powershell_json(script)
+        if data is None:
+            return []
+        if isinstance(data, dict):
+            return [data]
+        return list(data)
     except Exception:
         return []
-    if data is None:
-        return []
-    if isinstance(data, dict):
-        return [data]
-    return list(data)
 
 
 def _listen_ports(pid: int) -> list[int]:
+    # Primary: fast netstat (<0.1s)
+    try:
+        res = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True, timeout=2.0)
+        ports: list[int] = []
+        target_pid = str(pid)
+        for line in res.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING" and parts[4] == target_pid:
+                addr, port_str = parts[1].rsplit(":", 1)
+                try:
+                    ports.append(int(port_str))
+                except ValueError:
+                    pass
+        if ports:
+            return list(set(ports))
+    except Exception:
+        pass
+
+    # Fallback: PowerShell
     script = f"@(Get-NetTCPConnection -State Listen -OwningProcess {int(pid)} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort -Unique) | ConvertTo-Json -Compress"
     try:
         data = _powershell_json(script)
@@ -293,7 +346,7 @@ def probe_antigravity_2() -> dict[str, Any]:
         try:
             c_csrf = _WORKING_ENDPOINT.get("csrf")
             c_sec = bool(_WORKING_ENDPOINT.get("secure", True))
-            _post_local(int(cached_port), "/exa.language_server_pb.LanguageServerService/GetUnleashData", c_csrf, c_sec, timeout=0.6)
+            _post_local(int(cached_port), "/exa.language_server_pb.LanguageServerService/GetUnleashData", c_csrf, c_sec, timeout=1.5)
             summary = _fetch_summary(int(cached_port), c_csrf, c_sec)
             if summary and summary.get("email"):
                 summary["ok"] = True
@@ -322,7 +375,7 @@ def probe_antigravity_2() -> dict[str, Any]:
                 matched_sec = True
                 for secure in (True, False):
                     try:
-                        _post_local(port, "/exa.language_server_pb.LanguageServerService/GetUnleashData", csrf, secure, timeout=0.4)
+                        _post_local(port, "/exa.language_server_pb.LanguageServerService/GetUnleashData", csrf, secure, timeout=1.5)
                         ready = True
                         matched_sec = secure
                         break

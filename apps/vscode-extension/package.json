@@ -2,7 +2,7 @@
     "name": "ai-quota",
     "displayName": "AI-Quota",
     "description": "Universal AI Account & Quota Manager — monitor quotas, manage accounts, and switch between AI providers directly from your IDE.",
-    "version": "2.0.5",
+    "version": "2.0.6",
     "publisher": "Kesicode",
     "license": "MIT",
     "homepage": "https://github.com/Kesicode/AI-Quota#readme",
@@ -164,6 +164,11 @@
                 "command": "ai-quota.unpinStatusBarModel",
                 "title": "AI-Quota: Unpin Model from Status Bar",
                 "icon": "$(pinned-dirty)"
+            },
+            {
+                "command": "ai-quota.startBackend",
+                "title": "AI-Quota: Start Local Engine",
+                "icon": "$(play)"
             }
         ],
         "keybindings": [
@@ -250,6 +255,9 @@
                 },
                 {
                     "command": "ai-quota.unpinStatusBarModel"
+                },
+                {
+                    "command": "ai-quota.startBackend"
                 }
             ]
         },

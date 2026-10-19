@@ -344,6 +344,28 @@ export function registerAllCommands(
     }
   });
 
+  // ── Start Backend Process ──────────────────────────────────────────────────
+  reg("ai-quota.startBackend", async () => {
+    let term = vscode.window.terminals.find(t => t.name === "AI-Quota Server");
+    if (!term) {
+      term = vscode.window.createTerminal({
+        name: "AI-Quota Server",
+      });
+    }
+    term.show(true);
+    term.sendText("python -m app.main");
+    vscode.window.showInformationMessage("AI-Quota: Launching local engine on http://127.0.0.1:8765...");
+    setTimeout(async () => {
+      try {
+        await client.sync();
+      } catch { /* best effort */ }
+      ctx.quotaSidebarProvider.refresh();
+      ctx.statusBar?.refresh();
+      ctx.accountsProvider.refresh();
+      ctx.providersProvider.refresh();
+    }, 2500);
+  });
+
   // ── Restart Backend Process ────────────────────────────────────────────────
   reg("ai-quota.restartBackend", async () => {
     const confirmed = await vscode.window.showWarningMessage(
