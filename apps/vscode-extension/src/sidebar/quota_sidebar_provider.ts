@@ -1,18 +1,16 @@
 /**
- * AI-Quota — Quota Sidebar WebviewView Provider (Phase 18)
+ * AI-Quota — Quota Sidebar WebviewView Provider
  *
- * Renders the main quota view in the Activity Bar sidebar panel.
+ * Renders the main quota view in the Activity Bar sidebar.
  *
- * Surfaces:
- *   - Account cards with real-time quota bars
- *   - Predictions panel (velocity, risk, ETA, recommended)
- *   - Quick label editor (click pencil icon)
- *   - SSE live feed indicator (green dot pulses when agent pushes events)
- *   - Webhook alert status indicator
- *   - Offline banner with restart command
- *
- * Live updates: extension polls on a configurable interval AND listens to
- * SSE /api/v1/events for push-style updates from the agent.
+ * Layout (matches Antigravity Account Switcher design):
+ *   - Header: agent status pill + Quota Matrix button
+ *   - Current Account: avatar initials, name, email, plan/connection badges,
+ *     Re-auth and Sign out action buttons
+ *   - Usage: provider-grouped quota cards (Gemini, Claude+GPT, etc.)
+ *   - Saved Accounts: collapsible section with search + sort,
+ *     account cards with left-border active indicator
+ *   - Footer: "Developed by Kesicode"
  */
 
 import * as vscode from "vscode";
@@ -50,7 +48,6 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._getHtml(webviewView.webview);
 
-    // ── Handle messages from webview ────────────────────────────────────
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.command) {
         case "switch":
@@ -64,7 +61,9 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
               await this.refresh();
               vscode.window.showInformationMessage("AI-Quota: Account switched.");
             } catch (e: unknown) {
-              vscode.window.showErrorMessage(`Switch failed: ${e instanceof Error ? e.message : String(e)}`);
+              vscode.window.showErrorMessage(
+                `Switch failed: ${e instanceof Error ? e.message : String(e)}`
+              );
             }
           }
           break;
@@ -81,6 +80,14 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           await vscode.commands.executeCommand("ai-quota.showQuotaMatrix");
           break;
 
+        case "reAuth":
+          await vscode.commands.executeCommand("ai-quota.reAuth");
+          break;
+
+        case "signOut":
+          await vscode.commands.executeCommand("ai-quota.signOut");
+          break;
+
         case "saveLabel": {
           const { accountId, label, notes, color } = msg;
           if (accountId) {
@@ -92,7 +99,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
               });
               await this.refresh();
             } catch {
-              // silent — UI still updates optimistically
+              // silent
             }
           }
           break;
@@ -102,19 +109,22 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           try {
             const result = await this._client.testWebhook();
             if (result.ok) {
-              vscode.window.showInformationMessage(`Webhook test: HTTP ${result.http_status} — OK`);
+              vscode.window.showInformationMessage(
+                `Webhook test: HTTP ${result.http_status} — OK`
+              );
             } else {
               vscode.window.showWarningMessage(`Webhook test failed: ${result.error}`);
             }
           } catch (e: unknown) {
-            vscode.window.showErrorMessage(`Webhook test error: ${e instanceof Error ? e.message : String(e)}`);
+            vscode.window.showErrorMessage(
+              `Webhook test error: ${e instanceof Error ? e.message : String(e)}`
+            );
           }
           break;
         }
       }
     });
 
-    // Initial data load
     this.refresh();
   }
 
@@ -126,7 +136,6 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         this._client.getPredictions("24h").catch(() => null),
       ]);
 
-      // Attach prediction data onto account objects for easy rendering
       const predMap = new Map<number, PredictionItem>();
       if (predictions) {
         for (const p of predictions.predictions) {
@@ -150,7 +159,9 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  // ── HTML ──────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // HTML
+  // ─────────────────────────────────────────────────────────────────────────
 
   private _getHtml(webview: vscode.Webview): string {
     const nonce = _nonce();
@@ -163,249 +174,784 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
   <title>AI-Quota</title>
   <style>
     :root {
-      --bg:       var(--vscode-sideBar-background, #0a0b0e);
-      --surface:  var(--vscode-editor-background, #0f1115);
-      --fg:       var(--vscode-foreground, #e8eaed);
-      --muted:    var(--vscode-descriptionForeground, #9aa0a6);
-      --accent:   #1a9e5c;
-      --accent-g: rgba(26,158,92,0.15);
-      --warn:     #f0a500;
-      --error:    #e53935;
-      --r:        6px;
-      --font:     var(--vscode-font-family, 'Inter', system-ui, sans-serif);
-      --mono:     var(--vscode-editor-font-family, 'JetBrains Mono', monospace);
+      --bg:        var(--vscode-sideBar-background, #1e1e1e);
+      --surface:   var(--vscode-editor-background, #252526);
+      --surface2:  rgba(255,255,255,0.04);
+      --border:    rgba(255,255,255,0.07);
+      --fg:        var(--vscode-foreground, #cccccc);
+      --muted:     var(--vscode-descriptionForeground, #7f7f7f);
+      --accent:    #1a9e5c;
+      --accent-bg: rgba(26,158,92,0.12);
+      --accent-bd: rgba(26,158,92,0.35);
+      --warn:      #e5a000;
+      --warn-bg:   rgba(229,160,0,0.12);
+      --error:     #e53935;
+      --blue:      #4da3ff;
+      --blue-bg:   rgba(77,163,255,0.12);
+      --r:         6px;
+      --r-sm:      4px;
+      --font:      var(--vscode-font-family, 'Segoe UI', system-ui, sans-serif);
+      --mono:      var(--vscode-editor-font-family, 'Consolas', monospace);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       background: var(--bg);
       color: var(--fg);
       font-family: var(--font);
       font-size: 12px;
       line-height: 1.5;
-      padding: 8px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
-    /* Header */
-    .hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.06); }
-    .hd-title { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-    .live-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 4px var(--accent); animation:pulse 2s infinite; }
-    .live-dot.offline { background:rgba(255,255,255,0.2); box-shadow:none; animation:none; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-    .btn-icon { background:none; border:none; color:var(--muted); cursor:pointer; padding:3px 6px; border-radius:4px; font-size:11px; transition:background .15s,color .15s; }
-    .btn-icon:hover { background:rgba(255,255,255,0.06); color:var(--fg); }
+    /* ── Scrollable body ── */
+    #scroll-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0 0 8px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+    #scroll-body::-webkit-scrollbar { width: 4px; }
+    #scroll-body::-webkit-scrollbar-track { background: transparent; }
+    #scroll-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
-    /* Action strip */
-    .actions { display:flex; gap:4px; margin-bottom:8px; }
-    .btn-sm { flex:1; padding:5px 4px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:var(--r); color:var(--muted); font-size:10px; cursor:pointer; transition:background .15s,color .15s; text-align:center; }
-    .btn-sm:hover { background:rgba(255,255,255,0.08); color:var(--fg); }
+    /* ── Top header bar ── */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .status-dot.online  { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+    .status-dot.offline { background: rgba(255,255,255,0.2); }
+    .status-label { color: var(--muted); }
+    .status-label strong { color: var(--fg); }
 
-    /* Recommendation banner */
-    .rec-banner { background:rgba(26,158,92,.10); border:1px solid rgba(26,158,92,.25); border-radius:var(--r); padding:6px 10px; margin-bottom:8px; font-size:10px; color:var(--accent); }
-    .rec-banner strong { display:block; font-size:11px; margin-bottom:2px; }
+    .top-actions { display: flex; align-items: center; gap: 4px; }
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 14px; line-height: 1;
+      padding: 3px 5px; border-radius: var(--r-sm);
+      transition: background .15s, color .15s;
+      display: flex; align-items: center;
+    }
+    .btn-icon:hover { background: var(--surface2); color: var(--fg); }
 
-    /* Account cards */
-    .card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:var(--r); padding:10px 12px; margin-bottom:7px; transition:border-color .15s,background .15s; }
-    .card:hover { background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.12); }
-    .card.best { border-color:var(--accent); background:var(--accent-g); }
+    .btn-matrix {
+      display: flex; align-items: center; gap: 5px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--muted);
+      font-size: 10px; font-weight: 500; padding: 3px 8px;
+      cursor: pointer; transition: background .15s, color .15s;
+    }
+    .btn-matrix:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
 
-    .card-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:6px; }
-    .card-name { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px; display:flex; align-items:center; }
-    .active-badge { font-size:9px; font-weight:700; letter-spacing:0.06em; background:rgba(26,158,92,0.25); color:#4fa84f; border:1px solid rgba(79,168,79,0.4); padding:1px 5px; border-radius:3px; margin-left:6px; text-transform:uppercase; flex-shrink:0; }
-    .card-actions { display:flex; gap:3px; flex-shrink:0; }
-    .card-tag { font-size:10px; color:var(--muted); font-family:var(--mono); margin-bottom:6px; }
+    /* ── Section label ── */
+    .section-label {
+      font-size: 10px; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted);
+      padding: 10px 12px 5px;
+    }
 
-    /* Quota bar */
-    .bar-wrap { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
-    .bar-lbl { font-size:10px; color:var(--muted); width:52px; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .bar-track { flex:1; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; }
-    .bar-fill { height:100%; border-radius:2px; background:var(--accent); transition:width .3s; }
-    .bar-fill.warn { background:var(--warn); }
-    .bar-fill.crit { background:var(--error); }
-    .bar-pct { font-size:10px; font-family:var(--mono); width:28px; text-align:right; }
+    /* ── Current Account ── */
+    .current-account {
+      margin: 0 10px 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 12px;
+    }
+    .acct-row { display: flex; align-items: flex-start; gap: 10px; }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #1a9e5c, #0e6b3e);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 700; color: #fff;
+      flex-shrink: 0; text-transform: uppercase;
+      border: 2px solid rgba(26,158,92,0.4);
+    }
+    .acct-info { flex: 1; min-width: 0; }
+    .acct-name {
+      font-size: 13px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 1px;
+    }
+    .acct-email {
+      font-size: 10px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 5px;
+    }
+    .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .badge {
+      font-size: 9px; font-weight: 600; letter-spacing: .03em;
+      padding: 2px 6px; border-radius: 3px;
+      display: flex; align-items: center; gap: 3px;
+    }
+    .badge-plan {
+      background: rgba(255,193,7,0.15); color: #f5c842;
+      border: 1px solid rgba(245,200,66,0.3);
+    }
+    .badge-instant {
+      background: var(--blue-bg); color: var(--blue);
+      border: 1px solid rgba(77,163,255,0.3);
+    }
+    .badge-connected {
+      background: var(--accent-bg); color: #4ade80;
+      border: 1px solid rgba(74,222,128,0.3);
+    }
+    .badge-offline {
+      background: rgba(229,57,53,0.12); color: #ef9a9a;
+      border: 1px solid rgba(229,57,53,0.3);
+    }
+    .acct-btns { display: flex; gap: 6px; margin-top: 4px; }
+    .btn-reauth {
+      padding: 4px 10px; font-size: 10px; font-weight: 500;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--fg);
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-reauth:hover { background: rgba(255,255,255,0.08); }
+    .btn-signout {
+      padding: 4px 10px; font-size: 10px; font-weight: 500;
+      background: none; border: 1px solid rgba(229,57,53,0.35);
+      border-radius: var(--r-sm); color: #ef9a9a;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-signout:hover { background: rgba(229,57,53,0.10); }
+    .edit-acct-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 12px; padding: 2px 4px;
+      border-radius: var(--r-sm); flex-shrink: 0;
+      transition: color .15s;
+    }
+    .edit-acct-btn:hover { color: var(--fg); }
 
-    /* Status dot */
-    .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; vertical-align:middle; flex-shrink:0; }
-    .dot.live { background:var(--accent); box-shadow:0 0 4px var(--accent); }
-    .dot.stale { background:var(--warn); }
-    .dot.offline { background:rgba(255,255,255,0.2); }
+    /* ── Usage section ── */
+    .usage-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px 4px;
+    }
+    .usage-label { font-size: 11px; font-weight: 600; }
+    .usage-time { font-size: 10px; color: var(--muted); }
+    .usage-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px; padding: 0 10px 4px;
+    }
+    .usage-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 8px 10px;
+    }
+    .usage-provider {
+      font-size: 11px; font-weight: 600; margin-bottom: 6px;
+    }
+    .usage-window { margin-bottom: 3px; }
+    .usage-pct {
+      font-size: 12px; font-weight: 700;
+      display: inline;
+    }
+    .usage-pct.good  { color: var(--accent); }
+    .usage-pct.warn  { color: var(--warn); }
+    .usage-pct.crit  { color: var(--error); }
+    .usage-win-name  { font-size: 10px; color: var(--muted); display: inline; margin-left: 1px; }
+    .usage-reset { font-size: 9px; color: var(--muted); margin-bottom: 3px; }
+    .usage-bar-track {
+      height: 3px; background: rgba(255,255,255,0.08);
+      border-radius: 2px; overflow: hidden; margin-bottom: 6px;
+    }
+    .usage-bar-fill {
+      height: 100%; border-radius: 2px;
+      transition: width .4s ease;
+    }
+    .usage-bar-fill.good { background: var(--accent); }
+    .usage-bar-fill.warn { background: var(--warn); }
+    .usage-bar-fill.crit { background: var(--error); }
 
-    /* Prediction row */
-    .pred-row { display:flex; gap:6px; margin-top:5px; flex-wrap:wrap; }
-    .pred-chip { font-size:9px; padding:2px 5px; border-radius:3px; font-family:var(--mono); }
-    .pred-chip.none,.pred-chip.low { background:rgba(26,158,92,.15); color:#4fa84f; }
-    .pred-chip.medium { background:rgba(240,165,0,.15); color:var(--warn); }
-    .pred-chip.high,.pred-chip.critical { background:rgba(229,57,53,.15); color:var(--error); }
-    .pred-warn { font-size:9px; color:var(--warn); margin-top:3px; }
+    /* ── Saved accounts section ── */
+    .saved-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px 6px; cursor: pointer; user-select: none;
+    }
+    .saved-header:hover { background: var(--surface2); }
+    .saved-header-left { display: flex; align-items: center; gap: 6px; }
+    .saved-chevron { font-size: 10px; color: var(--muted); transition: transform .2s; }
+    .saved-chevron.open { transform: rotate(0deg); }
+    .saved-chevron.closed { transform: rotate(-90deg); }
+    .saved-label { font-size: 11px; font-weight: 600; }
+    .saved-count {
+      font-size: 10px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 3px; padding: 0 5px; color: var(--muted);
+    }
+    .saved-header-right { display: flex; align-items: center; gap: 4px; }
+    .btn-add {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 15px; line-height: 1;
+      width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--r-sm); transition: background .15s, color .15s;
+    }
+    .btn-add:hover { background: var(--surface2); color: var(--fg); }
 
-    /* Switch button */
-    .btn-switch { display:block; width:100%; margin-top:8px; padding:5px; background:var(--accent); color:#fff; border:none; border-radius:var(--r); font-size:11px; font-weight:600; cursor:pointer; letter-spacing:.04em; transition:opacity .15s; }
-    .btn-switch:hover { opacity:.85; }
+    .saved-body { padding: 0 10px; }
+    .search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .search-wrap {
+      flex: 1; position: relative;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r-sm); display: flex; align-items: center;
+    }
+    .search-wrap:focus-within { border-color: rgba(255,255,255,0.2); }
+    .search-icon { padding: 0 6px; color: var(--muted); font-size: 11px; }
+    .search-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--fg); font-size: 11px; padding: 4px 0;
+      font-family: var(--font);
+    }
+    .search-input::placeholder { color: var(--muted); }
+    .search-clear {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); padding: 0 6px; font-size: 12px;
+      line-height: 1; display: none;
+    }
+    .search-clear.visible { display: block; }
+
+    .sort-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--muted); font-size: 10px;
+      padding: 4px 8px; cursor: pointer; white-space: nowrap;
+      display: flex; align-items: center; gap: 3px;
+      transition: background .15s, color .15s;
+    }
+    .sort-btn:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
+
+    /* ── Account card ── */
+    .acct-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); margin-bottom: 6px;
+      border-left: 3px solid transparent;
+      transition: border-color .15s, background .15s;
+    }
+    .acct-card.active { border-left-color: var(--accent); }
+    .acct-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); border-left-width: 3px; }
+    .acct-card.active:hover { border-left-color: var(--accent); }
+
+    .acct-card-head { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px 6px; }
+    .card-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: linear-gradient(135deg, #555, #333);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #fff;
+      flex-shrink: 0; text-transform: uppercase; position: relative;
+    }
+    .card-avatar.active-acc::after {
+      content: ''; position: absolute; bottom: 0; right: 0;
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg);
+    }
+    .card-acct-info { flex: 1; min-width: 0; }
+    .card-acct-name {
+      font-size: 11px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-acct-email { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .card-badges { display: flex; flex-wrap: wrap; gap: 3px; }
+    .card-badge {
+      font-size: 9px; font-weight: 600; padding: 1px 5px;
+      border-radius: 3px; display: flex; align-items: center; gap: 2px;
+    }
+    .active-tag {
+      background: var(--accent-bg); color: #4ade80;
+      border: 1px solid var(--accent-bd);
+    }
+    .plan-tag { background: rgba(255,193,7,0.12); color: #f5c842; border: 1px solid rgba(245,200,66,0.25); }
+    .instant-tag { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(77,163,255,0.25); }
+    .actnow-tag { background: var(--accent-bg); color: #4ade80; border: 1px solid var(--accent-bd); }
+    .stale-tag { background: var(--warn-bg); color: var(--warn); border: 1px solid rgba(229,160,0,0.3); }
+
+    .card-actions { display: flex; gap: 2px; flex-shrink: 0; }
+    .card-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 12px; padding: 3px 4px;
+      border-radius: var(--r-sm); transition: background .15s, color .15s;
+    }
+    .card-btn:hover { background: var(--surface2); color: var(--fg); }
+    .card-btn.delete:hover { color: var(--error); }
+
+    /* Card usage mini-grid */
+    .card-usage {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 4px; padding: 0 10px 8px;
+    }
+    .card-usage-box {
+      background: rgba(0,0,0,0.15); border: 1px solid var(--border);
+      border-radius: var(--r-sm); padding: 5px 7px;
+    }
+    .cu-provider { font-size: 9px; font-weight: 600; color: var(--muted); margin-bottom: 3px; }
+    .cu-window { margin-bottom: 2px; }
+    .cu-pct { font-size: 11px; font-weight: 700; }
+    .cu-pct.good { color: var(--accent); }
+    .cu-pct.warn { color: var(--warn); }
+    .cu-pct.crit { color: var(--error); }
+    .cu-win  { font-size: 9px; color: var(--muted); }
+    .cu-reset { font-size: 8px; color: var(--muted); }
+
+    /* Switch button (non-active accounts) */
+    .btn-switch-to {
+      display: block; width: calc(100% - 20px); margin: 0 10px 8px;
+      padding: 5px; background: var(--accent); color: #fff;
+      border: none; border-radius: var(--r-sm); font-size: 10px;
+      font-weight: 600; cursor: pointer; letter-spacing: .04em;
+      transition: opacity .15s;
+    }
+    .btn-switch-to:hover { opacity: .82; }
 
     /* Label editor */
-    .label-editor { margin-top:6px; padding:6px 8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:var(--r); display:none; }
-    .label-editor.open { display:block; }
-    .label-editor input { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:3px; color:var(--fg); font-size:10px; padding:3px 6px; margin-bottom:4px; outline:none; }
-    .label-editor input:focus { border-color:var(--accent); }
-    .le-actions { display:flex; gap:4px; }
-    .le-save { flex:1; padding:3px; background:var(--accent); border:none; border-radius:3px; color:#fff; font-size:10px; cursor:pointer; }
-    .le-cancel { flex:1; padding:3px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:3px; color:var(--muted); font-size:10px; cursor:pointer; }
+    .label-editor {
+      margin: 0 10px 8px; padding: 6px 8px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: var(--r-sm); display: none;
+    }
+    .label-editor.open { display: block; }
+    .label-editor input {
+      width: 100%; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); border-radius: 3px;
+      color: var(--fg); font-size: 10px; padding: 3px 6px;
+      margin-bottom: 4px; outline: none; font-family: var(--font);
+    }
+    .label-editor input:focus { border-color: var(--accent); }
+    .le-actions { display: flex; gap: 4px; }
+    .le-save {
+      flex: 1; padding: 3px; background: var(--accent);
+      border: none; border-radius: 3px; color: #fff;
+      font-size: 10px; cursor: pointer;
+    }
+    .le-cancel {
+      flex: 1; padding: 3px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 3px;
+      color: var(--muted); font-size: 10px; cursor: pointer;
+    }
 
-    /* Empty / offline */
-    .empty { text-align:center; color:var(--muted); padding:28px 8px; font-size:11px; }
-    .offline-banner { background:rgba(229,57,53,.1); border:1px solid rgba(229,57,53,.25); border-radius:var(--r); padding:8px 10px; font-size:11px; color:#ef9a9a; margin-bottom:8px; }
+    /* Empty states */
+    .empty { text-align: center; color: var(--muted); padding: 20px 8px; font-size: 11px; }
+    .offline-banner {
+      margin: 8px 10px;
+      background: rgba(229,57,53,.10); border: 1px solid rgba(229,57,53,.25);
+      border-radius: var(--r); padding: 8px 12px;
+      font-size: 11px; color: #ef9a9a;
+    }
+    .offline-banner code {
+      display: inline-block; margin-top: 4px;
+      background: rgba(0,0,0,.3); padding: 2px 6px;
+      border-radius: 3px; font-size: 10px; font-family: var(--mono);
+    }
 
-    /* Reset countdown */
-    .reset-row { font-size:9px; color:var(--muted); margin-top:2px; }
+    /* ── Footer ── */
+    .footer {
+      flex-shrink: 0; padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-credit { font-size: 10px; color: var(--muted); }
+    .footer-credit a { color: #4da3ff; text-decoration: none; }
+    .footer-version { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+    /* Animations */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .pulsing { animation: pulse 2s infinite; }
   </style>
 </head>
 <body>
-  <div class="hd">
-    <div class="hd-title">
-      <span class="live-dot offline" id="liveDot"></span>
-      AI-Quota
+
+  <!-- ── Top bar ── -->
+  <div class="top-bar">
+    <div class="status-pill">
+      <span class="status-dot offline pulsing" id="statusDot"></span>
+      <span class="status-label">AI-Quota: <strong id="statusText">Connecting…</strong></span>
     </div>
-    <button class="btn-icon" id="refreshBtn" title="Refresh">↻</button>
+    <div class="top-actions">
+      <button class="btn-icon" id="refreshBtn" title="Refresh">↻</button>
+      <button class="btn-matrix" id="matrixBtn">⊞ Quota Matrix</button>
+    </div>
   </div>
 
-  <div class="actions">
-    <button class="btn-sm" id="dashboardBtn">Dashboard</button>
-    <button class="btn-sm" id="matrixBtn">Matrix</button>
-    <button class="btn-sm" id="webhookBtn" title="Test webhook">🔔</button>
-  </div>
+  <!-- ── Scrollable body ── -->
+  <div id="scroll-body">
 
-  <div id="rec"></div>
-  <div id="content"><div class="empty">Loading…</div></div>
+    <!-- Current account -->
+    <div class="section-label">Current account</div>
+    <div id="currentAccount"></div>
+
+    <!-- Usage -->
+    <div class="usage-header">
+      <span class="usage-label">Usage</span>
+      <span class="usage-time" id="usageTime"></span>
+    </div>
+    <div class="usage-grid" id="usageGrid">
+      <div class="usage-card">
+        <div class="usage-provider">—</div>
+        <div class="empty" style="padding:8px 0;font-size:10px">No data</div>
+      </div>
+    </div>
+
+    <!-- Saved accounts -->
+    <div class="saved-header" id="savedToggle">
+      <div class="saved-header-left">
+        <span class="saved-chevron open" id="savedChevron">∨</span>
+        <span class="saved-label">Saved accounts</span>
+        <span class="saved-count" id="savedCount">0</span>
+      </div>
+      <div class="saved-header-right">
+        <button class="btn-add" id="addBtn" title="Add account">+</button>
+      </div>
+    </div>
+
+    <div id="savedBody" class="saved-body">
+      <div class="search-row">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" type="text" id="searchInput" placeholder="Search accounts">
+          <button class="search-clear" id="searchClear">✕</button>
+        </div>
+        <button class="sort-btn" id="sortBtn">Recently used ⌄</button>
+      </div>
+      <div id="accountsList"></div>
+    </div>
+
+    <!-- Offline fallback (hidden unless error) -->
+    <div id="offlineBanner" style="display:none"></div>
+
+  </div><!-- /#scroll-body -->
+
+  <!-- ── Footer ── -->
+  <div class="footer">
+    <span class="footer-credit">Developed by <a href="#">Kesicode</a></span>
+    <span class="footer-version" id="footerVersion">v2.0</span>
+  </div>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     let _accounts = [];
     let _recommendation = null;
+    let _savedOpen = true;
+    let _sortMode = 'recent'; // 'recent' | 'quota' | 'name'
+    let _searchQ = '';
 
-    document.getElementById('refreshBtn').onclick  = () => vscode.postMessage({ command: 'refresh' });
-    document.getElementById('dashboardBtn').onclick = () => vscode.postMessage({ command: 'openDashboard' });
-    document.getElementById('matrixBtn').onclick    = () => vscode.postMessage({ command: 'showMatrix' });
-    document.getElementById('webhookBtn').onclick   = () => vscode.postMessage({ command: 'testWebhook' });
+    // ── Buttons ────────────────────────────────────────────────────────────
+    document.getElementById('refreshBtn').onclick = () => vscode.postMessage({ command: 'refresh' });
+    document.getElementById('matrixBtn').onclick   = () => vscode.postMessage({ command: 'showMatrix' });
+    document.getElementById('addBtn').onclick      = () => vscode.postMessage({ command: 'switch' });
 
-    // ── Formatters ──────────────────────────────────────────────────────
+    document.getElementById('savedToggle').onclick = (e) => {
+      if (e.target.closest('#addBtn')) return;
+      _savedOpen = !_savedOpen;
+      document.getElementById('savedBody').style.display = _savedOpen ? '' : 'none';
+      const ch = document.getElementById('savedChevron');
+      ch.className = 'saved-chevron ' + (_savedOpen ? 'open' : 'closed');
+      ch.textContent = _savedOpen ? '∨' : '›';
+    };
+
+    // Search
+    const searchInput = document.getElementById('searchInput');
+    const searchClear = document.getElementById('searchClear');
+    searchInput.oninput = () => {
+      _searchQ = searchInput.value.toLowerCase();
+      searchClear.className = 'search-clear' + (_searchQ ? ' visible' : '');
+      renderAccounts();
+    };
+    searchClear.onclick = () => {
+      searchInput.value = ''; _searchQ = '';
+      searchClear.className = 'search-clear';
+      renderAccounts();
+    };
+
+    // Sort
+    const SORT_LABELS = { recent: 'Recently used', quota: 'Quota %', name: 'Name' };
+    const SORT_ORDER  = ['recent','quota','name'];
+    document.getElementById('sortBtn').onclick = () => {
+      const idx = SORT_ORDER.indexOf(_sortMode);
+      _sortMode = SORT_ORDER[(idx + 1) % SORT_ORDER.length];
+      document.getElementById('sortBtn').textContent = SORT_LABELS[_sortMode] + ' ⌄';
+      renderAccounts();
+    };
+
+    // ── Formatters ─────────────────────────────────────────────────────────
     function fmtReset(iso) {
       if (!iso) return '';
       const diff = new Date(iso).getTime() - Date.now();
       if (diff <= 0) return 'Reset soon';
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
-      return h > 0 ? \`↺ \${h}h\${m}m\` : \`↺ \${m}m\`;
+      return h > 0 ? 'Resets in ' + h + 'h ' + m + 'm' : 'Resets in ' + m + 'm';
     }
-    function barCls(pct) {
+    function pctClass(pct) {
+      if (pct == null) return 'good';
       if (pct <= 10) return 'crit';
-      if (pct <= 20) return 'warn';
-      return '';
+      if (pct <= 25) return 'warn';
+      return 'good';
     }
-    function dotCls(status) {
-      if (status === 'live') return 'live';
-      if (status === 'stale' || status === 'recent') return 'stale';
-      return 'offline';
+    function initials(name) {
+      if (!name) return '?';
+      const parts = name.trim().split(/\\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return name.slice(0,2).toUpperCase();
     }
-    function trendIcon(t) {
-      return { stable:'━', consuming:'↘', recovering:'↗', exhausted:'✗', unknown:'?' }[t] || '?';
+    function timeAgo(date) {
+      if (!date) return 'just now';
+      const diff = Date.now() - new Date(date).getTime();
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+      if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+      return Math.floor(diff/86400000) + 'd ago';
     }
-    function fmtEta(h) {
-      if (h == null) return null;
-      if (h < 1) return \`\${Math.round(h*60)}m\`;
-      return \`\${h.toFixed(1)}h\`;
+    function providerLabel(p) {
+      const MAP = {
+        gemini: 'Gemini', google: 'Gemini',
+        anthropic: 'Claude', claude: 'Claude',
+        openai: 'GPT', gpt: 'GPT', copilot: 'Copilot',
+        cursor: 'Cursor',
+      };
+      if (!p) return 'Unknown';
+      return MAP[p.toLowerCase()] || (p.charAt(0).toUpperCase() + p.slice(1));
     }
-
-    // ── Render ──────────────────────────────────────────────────────────
-    function render() {
-      const dot = document.getElementById('liveDot');
-      dot.className = 'live-dot';  // online
-
-      // Recommendation banner
-      const recEl = document.getElementById('rec');
-      if (_recommendation && _recommendation.id) {
-        const bestAcc = _accounts.find(a => a.id === _recommendation.id);
-        const name = bestAcc ? (bestAcc.label || bestAcc.display_name || bestAcc.email) : \`Account \${_recommendation.id}\`;
-        recEl.innerHTML = \`<div class="rec-banner"><strong>✓ Recommended: \${name}</strong>\${_recommendation.reason}</div>\`;
-      } else {
-        recEl.innerHTML = '';
+    function groupByProvider(snapshots) {
+      const groups = {};
+      for (const s of (snapshots || [])) {
+        const key = s.quota_bucket || s.window_name || 'Other';
+        // Try to detect provider from bucket name
+        let prov = 'Other';
+        const kl = key.toLowerCase();
+        if (kl.includes('gemini') || kl.includes('google')) prov = 'Gemini';
+        else if (kl.includes('claude') || kl.includes('anthropic')) prov = 'Claude + GPT';
+        else if (kl.includes('openai') || kl.includes('gpt') || kl.includes('copilot')) prov = 'Claude + GPT';
+        else if (kl.includes('cursor')) prov = 'Cursor';
+        if (!groups[prov]) groups[prov] = [];
+        groups[prov].push(s);
       }
+      return groups;
+    }
 
-      const container = document.getElementById('content');
-      if (!_accounts || !_accounts.length) {
-        container.innerHTML = '<div class="empty">No accounts registered.<br>Add via Command Palette.</div>';
+    // ── Render current account ──────────────────────────────────────────────
+    function renderCurrentAccount() {
+      const el = document.getElementById('currentAccount');
+      const active = _accounts.find(a => a.status === 'live') || _accounts[0];
+      if (!active) {
+        el.innerHTML = '<div class="empty">No active account</div>';
+        return;
+      }
+      const name  = active.label || active.display_name || active.email || 'Account';
+      const email = active.email || '';
+      const prov  = providerLabel(active.provider);
+      const isInstant = active.provider_truth?.authority_type === 'live' ||
+                        (active.snapshots || []).length > 0;
+      const isConn  = active.status === 'live';
+      const initStr = initials(name);
+
+      el.innerHTML = \`<div class="current-account">
+        <div class="acct-row">
+          <div class="avatar">\${initStr}</div>
+          <div class="acct-info">
+            <div class="acct-name">\${_esc(name)}</div>
+            <div class="acct-email">\${_esc(email)}</div>
+            <div class="badges">
+              <span class="badge badge-plan">⭐ \${_esc(prov)}</span>
+              \${isInstant ? '<span class="badge badge-instant">⚡ Instant</span>' : ''}
+              \${isConn    ? '<span class="badge badge-connected">● Connected</span>'
+                           : '<span class="badge badge-offline">● Offline</span>'}
+            </div>
+            <div class="acct-btns">
+              <button class="btn-reauth" id="reauthBtn">Re-auth</button>
+              <button class="btn-signout" id="signoutBtn">Sign out</button>
+            </div>
+          </div>
+          <button class="edit-acct-btn" id="editCurrBtn" title="Edit label">✎</button>
+        </div>
+      </div>\`;
+
+      document.getElementById('reauthBtn').onclick  = () => vscode.postMessage({ command: 'reAuth' });
+      document.getElementById('signoutBtn').onclick = () => vscode.postMessage({ command: 'signOut' });
+      document.getElementById('editCurrBtn').onclick = () => {
+        // toggle the label editor of the active card in the accounts list
+        const le = document.getElementById('le-' + active.id);
+        if (le) le.classList.toggle('open');
+      };
+    }
+
+    // ── Render usage cards ──────────────────────────────────────────────────
+    function renderUsage() {
+      const active = _accounts.find(a => a.status === 'live') || _accounts[0];
+      const timeEl = document.getElementById('usageTime');
+      timeEl.textContent = active ? timeAgo(null) : '';
+
+      const grid = document.getElementById('usageGrid');
+      if (!active || !(active.snapshots || []).length) {
+        grid.innerHTML = '<div class="usage-card" style="grid-column:1/-1"><div class="empty" style="padding:10px 0;font-size:10px">No quota data yet</div></div>';
         return;
       }
 
-      const sorted = [..._accounts].sort((a, b) => {
-        if (a.status === 'live' && b.status !== 'live') return -1;
-        if (b.status === 'live' && a.status !== 'live') return 1;
-        return (b.best_remaining ?? 0) - (a.best_remaining ?? 0);
-      });
+      const groups = groupByProvider(active.snapshots);
+      const provKeys = Object.keys(groups);
+      if (!provKeys.length) {
+        grid.innerHTML = '<div class="usage-card" style="grid-column:1/-1"><div class="empty" style="padding:10px 0">No quota data</div></div>';
+        return;
+      }
 
-      container.innerHTML = sorted.map((acc, i) => {
-        const isBest = _recommendation && _recommendation.id === acc.id;
-        const name   = acc.label || acc.display_name || acc.email || \`Account \${acc.id}\`;
-        const pred   = acc.prediction;
+      grid.innerHTML = provKeys.map(prov => {
+        const snaps = groups[prov];
+        const rows  = snaps.slice(0, 2).map(s => {
+          const pct   = s.remaining_percent ?? 0;
+          const cls   = pctClass(pct);
+          const rst   = fmtReset(s.reset_at);
+          const wname = s.window_name || 'Usage';
+          return \`<div class="usage-window">
+            <span class="usage-pct \${cls}">\${pct.toFixed(0)}%</span>
+            <span class="usage-win-name">\${_esc(wname)}</span>
+          </div>
+          <div class="usage-bar-track"><div class="usage-bar-fill \${cls}" style="width:\${pct}%"></div></div>
+          \${rst ? '<div class="usage-reset">' + _esc(rst) + '</div>' : ''}\`;
+        }).join('');
 
-        // Quota bars (up to 3 snapshots)
-        const bars = (acc.snapshots || []).slice(0, 3).map(s => {
-          const sp  = s.remaining_percent ?? 0;
-          const rst = fmtReset(s.reset_at);
-          return \`<div class="bar-wrap">
-            <span class="bar-lbl" title="\${s.window_name}">\${s.window_name}</span>
-            <div class="bar-track"><div class="bar-fill \${barCls(sp)}" style="width:\${sp}%"></div></div>
-            <span class="bar-pct">\${sp.toFixed(0)}%</span>
-          </div>\${rst ? '<div class="reset-row">'+rst+'</div>' : ''}\`;
-        }).join('') || '<div style="color:var(--muted);font-size:10px">No quota data yet</div>';
+        return \`<div class="usage-card">
+          <div class="usage-provider">\${_esc(prov)}</div>
+          \${rows}
+        </div>\`;
+      }).join('');
+    }
 
-        // Prediction chips
-        let predHtml = '';
-        if (pred) {
-          const eta  = fmtEta(pred.hours_until_exhausted);
-          const rst  = fmtEta(pred.hours_until_reset);
-          predHtml = \`<div class="pred-row">
-            <span class="pred-chip \${pred.risk_level}" title="Risk">\${pred.risk_level.toUpperCase()}</span>
-            <span class="pred-chip \${pred.risk_level}" title="Trend">\${trendIcon(pred.trend)} \${pred.trend}</span>
-            \${pred.velocity_pph != null ? '<span class="pred-chip '+pred.risk_level+'" title="Velocity">'+( pred.velocity_pph > 0 ? '+' : '')+pred.velocity_pph.toFixed(1)+'%/h</span>' : ''}
-            \${eta ? '<span class="pred-chip '+pred.risk_level+'" title="Exhaustion ETA">💀 '+eta+'</span>' : ''}
-            \${rst ? '<span class="pred-chip none" title="Reset in">↺ '+rst+'</span>' : ''}
-          </div>\`;
-          if (pred.warning) predHtml += \`<div class="pred-warn">⚠ \${pred.warning}</div>\`;
+    // ── Render accounts list ────────────────────────────────────────────────
+    function renderAccounts() {
+      const countEl = document.getElementById('savedCount');
+      countEl.textContent = _accounts.length;
+
+      let sorted = [..._accounts];
+      if (_sortMode === 'quota') {
+        sorted.sort((a,b) => (b.best_remaining ?? 0) - (a.best_remaining ?? 0));
+      } else if (_sortMode === 'name') {
+        sorted.sort((a,b) => {
+          const na = (a.label || a.display_name || a.email || '').toLowerCase();
+          const nb = (b.label || b.display_name || b.email || '').toLowerCase();
+          return na < nb ? -1 : na > nb ? 1 : 0;
+        });
+      } else {
+        // recently used: active first, then by best_remaining
+        sorted.sort((a,b) => {
+          if (a.status === 'live' && b.status !== 'live') return -1;
+          if (b.status === 'live' && a.status !== 'live') return 1;
+          return (b.best_remaining ?? 0) - (a.best_remaining ?? 0);
+        });
+      }
+
+      if (_searchQ) {
+        sorted = sorted.filter(a => {
+          const haystack = [a.label, a.display_name, a.email, a.provider, a.client]
+            .filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(_searchQ);
+        });
+      }
+
+      const container = document.getElementById('accountsList');
+      if (!sorted.length) {
+        container.innerHTML = '<div class="empty">' +
+          (_searchQ ? 'No matching accounts.' : 'No accounts yet.<br>Add via Command Palette.') +
+          '</div>';
+        return;
+      }
+
+      container.innerHTML = sorted.map(acc => {
+        const isActive = acc.status === 'live';
+        const name     = acc.label || acc.display_name || acc.email || ('Account ' + acc.id);
+        const email    = acc.email || '';
+        const initStr  = initials(name);
+        const prov     = providerLabel(acc.provider);
+        const isInstant = acc.provider_truth?.authority_type === 'live' ||
+                          (acc.snapshots || []).length > 0;
+
+        // Card badges
+        const badges = [
+          isActive  ? '<span class="card-badge active-tag">Active</span>' : '',
+          '<span class="card-badge plan-tag">⭐ ' + _esc(prov) + '</span>',
+          isInstant ? '<span class="card-badge instant-tag">⚡ Instant</span>' : '',
+          isActive  ? '<span class="card-badge actnow-tag">⊙ Active now</span>' : '',
+          acc.status === 'stale' ? '<span class="card-badge stale-tag">⚠ Stale</span>' : '',
+        ].filter(Boolean).join('');
+
+        // Mini usage boxes
+        const groups = groupByProvider(acc.snapshots || []);
+        const provKeys = Object.keys(groups);
+        let usageBoxes = '';
+        if (provKeys.length) {
+          usageBoxes = '<div class="card-usage">' + provKeys.slice(0,2).map(p => {
+            const snaps = groups[p];
+            const rows  = snaps.slice(0,2).map(s => {
+              const pct = s.remaining_percent ?? 0;
+              const cls = pctClass(pct);
+              const rst = fmtReset(s.reset_at);
+              return \`<div class="cu-window">
+                <span class="cu-pct \${cls}">\${pct.toFixed(0)}%</span>
+                <span class="cu-win"> \${_esc(s.window_name || '')}</span>
+              </div>
+              \${rst ? '<div class="cu-reset">' + _esc(rst) + '</div>' : ''}\`;
+            }).join('');
+            return \`<div class="card-usage-box">
+              <div class="cu-provider">\${_esc(p)}</div>
+              \${rows}
+            </div>\`;
+          }).join('') + '</div>';
         }
 
-        return \`<div class="card \${isBest ? 'best' : ''}" data-id="\${acc.id}">
-          <div class="card-head">
-            <div class="card-name">
-              <span class="dot \${dotCls(acc.status)}"></span>\${name}
-              \${acc.status === 'live' ? '<span class="active-badge">ACTIVE</span>' : ''}
+        const switchBtn = !isActive
+          ? \`<button class="btn-switch-to" data-id="\${acc.id}">⇄ Switch to this account</button>\`
+          : '';
+
+        return \`<div class="acct-card \${isActive ? 'active' : ''}" data-id="\${acc.id}">
+          <div class="acct-card-head">
+            <div class="card-avatar \${isActive ? 'active-acc' : ''}">\${initStr}</div>
+            <div class="card-acct-info">
+              <div class="card-acct-name">\${_esc(name)}</div>
+              <div class="card-acct-email">\${_esc(email)}</div>
+              <div class="card-badges">\${badges}</div>
             </div>
             <div class="card-actions">
-              <button class="btn-icon edit-btn" data-id="\${acc.id}" title="Edit label">✏</button>
+              <button class="card-btn edit-btn" data-id="\${acc.id}" title="Edit label">✎</button>
+              <button class="card-btn delete" data-id="\${acc.id}" title="Remove">🗑</button>
             </div>
           </div>
-          <div class="card-tag">\${acc.provider || '—'} · \${acc.client || '—'}</div>
-          \${bars}
-          \${predHtml}
+          \${usageBoxes}
+          \${switchBtn}
           <div class="label-editor" id="le-\${acc.id}">
-            <input type="text" placeholder="Label (e.g. Work, Primary)" id="le-label-\${acc.id}" value="\${acc.label || ''}">
-            <input type="text" placeholder="Notes" id="le-notes-\${acc.id}" value="\${acc.notes || ''}">
+            <input type="text" placeholder="Label (e.g. Work, Primary)" id="le-label-\${acc.id}" value="\${_esc(acc.label || '')}">
+            <input type="text" placeholder="Notes" id="le-notes-\${acc.id}" value="">
             <div class="le-actions">
               <button class="le-save" data-id="\${acc.id}">Save</button>
               <button class="le-cancel" data-id="\${acc.id}">Cancel</button>
             </div>
           </div>
-          \${acc.status !== 'live' ? '<button class="btn-switch" data-id="'+acc.id+'">⇄ Switch to this account</button>' : ''}
         </div>\`;
       }).join('');
 
-      // Switch buttons
-      container.querySelectorAll('.btn-switch').forEach(btn => {
+      // Wire events
+      container.querySelectorAll('.btn-switch-to').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
           vscode.postMessage({ command: 'switchTo', accountId: btn.dataset.id });
         });
       });
-
-      // Edit label toggles
       container.querySelectorAll('.edit-btn').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
@@ -413,15 +959,12 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           if (le) le.classList.toggle('open');
         });
       });
-
-      // Label save
       container.querySelectorAll('.le-save').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
           const id = btn.dataset.id;
           vscode.postMessage({
-            command: 'saveLabel',
-            accountId: id,
+            command: 'saveLabel', accountId: id,
             label: document.getElementById('le-label-' + id)?.value || '',
             notes: document.getElementById('le-notes-' + id)?.value || '',
           });
@@ -429,8 +972,6 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           if (le) le.classList.remove('open');
         });
       });
-
-      // Label cancel
       container.querySelectorAll('.le-cancel').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
@@ -440,7 +981,41 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       });
     }
 
-    // ── Message handler ──────────────────────────────────────────────────
+    // ── Master render ───────────────────────────────────────────────────────
+    function render() {
+      // Status pill
+      const dot  = document.getElementById('statusDot');
+      const txt  = document.getElementById('statusText');
+      const active = _accounts.find(a => a.status === 'live');
+      if (_accounts.length > 0) {
+        dot.className = 'status-dot online';
+        txt.textContent = 'Ready';
+      }
+
+      document.getElementById('offlineBanner').style.display = 'none';
+      renderCurrentAccount();
+      renderUsage();
+      renderAccounts();
+    }
+
+    function renderOffline() {
+      const dot = document.getElementById('statusDot');
+      dot.className = 'status-dot offline';
+      dot.classList.add('pulsing');
+      document.getElementById('statusText').textContent = 'Offline';
+      document.getElementById('currentAccount').innerHTML =
+        '<div class="offline-banner">⚠ AI-Quota agent offline<br><code>python -m app.main</code></div>';
+      document.getElementById('usageGrid').innerHTML =
+        '<div class="usage-card" style="grid-column:1/-1"><div class="empty" style="padding:10px 0;font-size:10px">Agent not running</div></div>';
+      document.getElementById('accountsList').innerHTML = '';
+    }
+
+    // ── Escape helper ───────────────────────────────────────────────────────
+    function _esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Message handler ─────────────────────────────────────────────────────
     window.addEventListener('message', event => {
       const msg = event.data;
       if (msg.type === 'accounts') {
@@ -448,10 +1023,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         _recommendation = msg.recommendation || null;
         render();
       } else if (msg.type === 'error') {
-        document.getElementById('liveDot').className = 'live-dot offline';
-        document.getElementById('rec').innerHTML = '';
-        document.getElementById('content').innerHTML =
-          '<div class="offline-banner">⚠ AI-Quota agent offline<br><small>Start: python -m app.main</small></div>';
+        renderOffline();
       }
     });
   </script>
