@@ -14,6 +14,10 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    # Expose secrets as job-level env vars so step `if:` conditions can read them
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
     steps:
       - name: Checkout Repository
@@ -55,22 +59,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ──────────────────────────────────────────────────────────────
-      # Open VSX – always runs when secret exists (fixes skip bug)
+      # Open VSX – runs only when OVSX_PAT secret is set
+      # Uses env context (valid in step if:) — NOT secrets context
       # ──────────────────────────────────────────────────────────────
       - name: Publish to Open VSX Registry (Antigravity IDE, Cursor, VSCodium)
-        if: ${{ secrets.OVSX_PAT != '' }}
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        if: env.OVSX_PAT != ''
         run: |
           npx ovsx publish ai-quota.vsix -p "$OVSX_PAT"
 
       # ──────────────────────────────────────────────────────────────
-      # VS Code Marketplace – runs when secret exists
+      # VS Code Marketplace – runs only when VSCE_PAT secret is set
       # ──────────────────────────────────────────────────────────────
       - name: Publish to VS Code Marketplace
-        if: ${{ secrets.VSCE_PAT != '' }}
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        if: env.VSCE_PAT != ''
         run: |
           cd apps/vscode-extension
           npx @vscode/vsce publish -p "$VSCE_PAT" --no-dependencies
