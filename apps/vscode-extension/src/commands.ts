@@ -553,6 +553,90 @@ export function registerAllCommands(
     qp.show();
   });
 
+  // ── Pin Model to Status Bar ────────────────────────────────────────────────
+  reg("ai-quota.pinModelToStatusBar", async () => {
+    let accounts: AccountData[];
+    try {
+      accounts = await client.getAccounts();
+    } catch {
+      vscode.window.showErrorMessage("AI-Quota: Agent offline — cannot load models.");
+      return;
+    }
+
+    // Gather all unique window/model names from snapshots across all accounts
+    const modelSet = new Map<string, { pct: number | null; account: string }>();
+    for (const acc of accounts) {
+      const name = acc.label || acc.display_name || acc.email || `#${acc.id}`;
+      for (const snap of acc.snapshots ?? []) {
+        const key = snap.window_name || snap.quota_bucket || "Usage";
+        if (!modelSet.has(key)) {
+          modelSet.set(key, { pct: snap.remaining_percent, account: name });
+        }
+      }
+    }
+
+    if (!modelSet.size) {
+      vscode.window.showInformationMessage("AI-Quota: No quota windows found — try refreshing first.");
+      return;
+    }
+
+    const currentPin = ctx.statusBar?.getPinnedModel() ?? null;
+
+    const items: vscode.QuickPickItem[] = [];
+
+    // Option to unpin if currently pinned
+    if (currentPin) {
+      items.push({
+        label: "$(pinned-dirty) Unpin current model",
+        description: `Currently pinned: ${currentPin}`,
+        detail: "Remove pin — status bar will revert to overall best account quota",
+        alwaysShow: true,
+      });
+      items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
+    }
+
+    for (const [modelName, info] of modelSet.entries()) {
+      const isPinned = modelName === currentPin;
+      const pctStr = info.pct != null ? `${info.pct.toFixed(0)}%` : "?%";
+      items.push({
+        label: `${isPinned ? "$(pinned) " : "$(pin) "}${modelName}`,
+        description: `${pctStr}  ·  ${info.account}`,
+        detail: isPinned ? "  ✦ Currently pinned" : undefined,
+        alwaysShow: true,
+      });
+    }
+
+    const picked = await vscode.window.showQuickPick(items, {
+      title: "AI-Quota: Pin Model to Status Bar",
+      placeHolder: "Select a quota window to pin, or unpin current…",
+      matchOnDescription: true,
+    });
+
+    if (!picked) return;
+
+    if (picked.label.startsWith("$(pinned-dirty)")) {
+      // Unpin
+      await ctx.statusBar?.setPinnedModel(null);
+      vscode.window.showInformationMessage("AI-Quota: Status bar pin removed.");
+    } else {
+      // Extract model name (strip icon prefix)
+      const modelName = picked.label.replace(/^\$\([^)]+\)\s*/, "").trim();
+      await ctx.statusBar?.setPinnedModel(modelName);
+      vscode.window.showInformationMessage(`AI-Quota: Pinned "${modelName}" to status bar. 📌`);
+    }
+  });
+
+  // ── Unpin Status Bar Model ─────────────────────────────────────────────────
+  reg("ai-quota.unpinStatusBarModel", async () => {
+    const current = ctx.statusBar?.getPinnedModel();
+    if (!current) {
+      vscode.window.showInformationMessage("AI-Quota: No model is pinned.");
+      return;
+    }
+    await ctx.statusBar?.setPinnedModel(null);
+    vscode.window.showInformationMessage(`AI-Quota: Unpinned "${current}" from status bar.`);
+  });
+
   // ── Settings ───────────────────────────────────────────────────────────────
   reg("ai-quota.openSettings", () => {
     vscode.commands.executeCommand("workbench.action.openSettings", "ai-quota");

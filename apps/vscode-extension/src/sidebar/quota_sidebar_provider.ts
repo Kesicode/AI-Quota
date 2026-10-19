@@ -1,21 +1,21 @@
 /**
  * AI-Quota — Quota Sidebar WebviewView Provider
  *
- * COMPLETE REWRITE — v3.0
+ * COMPLETE REWRITE — v3.1 (Polished)
  * Merges best features from all 5 community repos:
- *   - Antigravity Account Switcher (design baseline)
+ *   - Antigravity Account Switcher (design baseline, dark green accent #1a9e5c)
  *   - AntigravityQuotaWatcher (wusimpl) — weekly limit detection, real-time monitoring
  *   - vscode-antigravity-cockpit (jlcodes99) — model grouping, privacy mode, trend indicators,
  *       auto-refresh countdown, notification threshold display
  *   - AntigravityQuota (Henrik-3) — per-model progress bars, reset countdowns, pinned models
- *   - AntigravityManager (Draculabo) — connected tools status, account management
+ *   - AntigravityManager (Draculabo) — connected tools status, account management, auto-switch
  *
- * Layout:
- *   Header: status pill | privacy toggle | refresh countdown | matrix button
- *   Current Account: avatar, name, email, plan/instant/connected badges, prediction bar
- *   Usage: per-model quota cards with progress bars, countdown, trend arrows
- *   Saved Accounts: collapsible, search+sort, cards with mini-usage, switch button
- *   Footer: threshold pill | "Developed by Kesicode" | version
+ * New in v3.1:
+ *   - Interactive 📌 Pin Model directly on model cards to bind to Status Bar
+ *   - ⚡ Auto-Switch Toggle Pill in footer (shows ON/OFF status, clickable)
+ *   - 📋 Copy Quota Summary button in usage header
+ *   - 📤 Export Accounts shortcut button in Saved Accounts header
+ *   - Polished gradient progress fills, micro-interactions, subtle elevations
  */
 
 import * as vscode from "vscode";
@@ -104,11 +104,48 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           await vscode.commands.executeCommand("ai-quota.openSettings");
           break;
 
+        case "exportAccounts":
+          await vscode.commands.executeCommand("ai-quota.exportAccounts");
+          break;
+
         case "togglePrivacy":
           this._privacyMode = !this._privacyMode;
           this._context.globalState.update("ai-quota.privacyMode", this._privacyMode);
           await this.refresh();
           break;
+
+        case "pinModel": {
+          if (msg.modelName) {
+            await this._context.globalState.update("ai-quota.pinnedModel", msg.modelName);
+            vscode.window.showInformationMessage(`AI-Quota: Pinned "${msg.modelName}" to status bar. 📌`);
+            await vscode.commands.executeCommand("ai-quota.refresh");
+          }
+          break;
+        }
+
+        case "unpinModel": {
+          await this._context.globalState.update("ai-quota.pinnedModel", "");
+          vscode.window.showInformationMessage("AI-Quota: Unpinned model from status bar.");
+          await vscode.commands.executeCommand("ai-quota.refresh");
+          break;
+        }
+
+        case "toggleAutoSwitch": {
+          const config = vscode.workspace.getConfiguration("ai-quota");
+          const cur = config.get<boolean>("autoSwitch", false);
+          await config.update("autoSwitch", !cur, vscode.ConfigurationTarget.Global);
+          vscode.window.showInformationMessage(`AI-Quota: Auto-switch is now ${!cur ? "ON ⚡" : "OFF"}.`);
+          await this.refresh();
+          break;
+        }
+
+        case "copyQuota": {
+          if (msg.text) {
+            await vscode.env.clipboard.writeText(msg.text);
+            vscode.window.showInformationMessage("AI-Quota: Quota summary copied to clipboard.");
+          }
+          break;
+        }
 
         case "deleteAccount": {
           const { accountId, accountName } = msg;
@@ -144,24 +181,6 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
             } catch {
               // silent
             }
-          }
-          break;
-        }
-
-        case "testWebhook": {
-          try {
-            const result = await this._client.testWebhook();
-            if (result.ok) {
-              vscode.window.showInformationMessage(
-                `Webhook test: HTTP ${result.http_status} — OK`
-              );
-            } else {
-              vscode.window.showWarningMessage(`Webhook test failed: ${result.error}`);
-            }
-          } catch (e: unknown) {
-            vscode.window.showErrorMessage(
-              `Webhook test error: ${e instanceof Error ? e.message : String(e)}`
-            );
           }
           break;
         }
@@ -206,6 +225,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       const config = vscode.workspace.getConfiguration("ai-quota");
       const threshold = config.get<number>("notificationThreshold", 20);
       const pollInterval = config.get<number>("pollInterval", 30);
+      const autoSwitch = config.get<boolean>("autoSwitch", false);
+      const pinnedModel = this._context.globalState.get<string>("ai-quota.pinnedModel", "");
 
       this._view!.webview.postMessage({
         type: "accounts",
@@ -216,6 +237,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         privacyMode: this._privacyMode,
         threshold,
         pollInterval,
+        autoSwitch,
+        pinnedModel,
         lastRefresh: this._lastRefresh?.toISOString() ?? null,
       });
     } catch {
@@ -240,24 +263,24 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     :root {
       --bg:        var(--vscode-sideBar-background, #1e1e1e);
       --surface:   var(--vscode-editor-background, #252526);
-      --surface2:  rgba(255,255,255,0.04);
-      --border:    rgba(255,255,255,0.07);
+      --surface2:  rgba(255,255,255,0.045);
+      --border:    rgba(255,255,255,0.08);
       --fg:        var(--vscode-foreground, #cccccc);
       --muted:     var(--vscode-descriptionForeground, #7f7f7f);
       --accent:    #1a9e5c;
-      --accent-bg: rgba(26,158,92,0.12);
-      --accent-bd: rgba(26,158,92,0.35);
+      --accent-bg: rgba(26,158,92,0.14);
+      --accent-bd: rgba(26,158,92,0.38);
       --warn:      #e5a000;
-      --warn-bg:   rgba(229,160,0,0.12);
+      --warn-bg:   rgba(229,160,0,0.14);
       --error:     #e53935;
       --blue:      #4da3ff;
-      --blue-bg:   rgba(77,163,255,0.12);
+      --blue-bg:   rgba(77,163,255,0.14);
       --purple:    #a78bfa;
-      --purple-bg: rgba(167,139,250,0.12);
+      --purple-bg: rgba(167,139,250,0.16);
       --r:         6px;
       --r-sm:      4px;
-      --font:      var(--vscode-font-family, 'Segoe UI', system-ui, sans-serif);
-      --mono:      var(--vscode-editor-font-family, 'Consolas', monospace);
+      --font:      var(--vscode-font-family, 'Segoe UI', system-ui, -apple-system, sans-serif);
+      --mono:      var(--vscode-editor-font-family, 'Cascadia Code', 'Consolas', monospace);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -271,6 +294,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      user-select: none;
     }
 
     /* ── Scrollable body ── */
@@ -278,77 +302,81 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 0 0 8px;
+      padding: 0 0 10px;
       scrollbar-width: thin;
-      scrollbar-color: rgba(255,255,255,0.1) transparent;
+      scrollbar-color: rgba(255,255,255,0.12) transparent;
     }
     #scroll-body::-webkit-scrollbar { width: 4px; }
     #scroll-body::-webkit-scrollbar-track { background: transparent; }
-    #scroll-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    #scroll-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
 
     /* ── Top header bar ── */
     .top-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 7px 10px 6px;
+      padding: 8px 10px 7px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       gap: 6px;
+      background: rgba(0,0,0,0.08);
     }
     .status-pill {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       font-size: 11px;
       font-weight: 500;
       flex: 1;
       min-width: 0;
     }
     .status-dot {
-      width: 7px; height: 7px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       background: var(--muted);
       flex-shrink: 0;
+      transition: all .2s;
     }
-    .status-dot.online  { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
-    .status-dot.offline { background: rgba(255,255,255,0.2); }
-    .status-label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .status-label strong { color: var(--fg); }
+    .status-dot.online  { background: var(--accent); box-shadow: 0 0 7px var(--accent); }
+    .status-dot.offline { background: rgba(255,255,255,0.25); }
+    .status-label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+    .status-label strong { color: var(--fg); font-weight: 600; }
 
     .top-actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
     .btn-icon {
       background: none; border: none; cursor: pointer;
       color: var(--muted); font-size: 13px; line-height: 1;
-      padding: 3px 4px; border-radius: var(--r-sm);
-      transition: background .15s, color .15s;
-      display: flex; align-items: center;
+      padding: 4px 5px; border-radius: var(--r-sm);
+      transition: background .15s, color .15s, transform .1s;
+      display: flex; align-items: center; justify-content: center;
     }
     .btn-icon:hover { background: var(--surface2); color: var(--fg); }
-    .btn-icon.active { color: var(--accent); }
+    .btn-icon:active { transform: scale(0.95); }
+    .btn-icon.active { color: var(--accent); background: var(--accent-bg); }
     .btn-icon[title] { cursor: pointer; }
 
     .btn-matrix {
       display: flex; align-items: center; gap: 4px;
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: var(--r-sm); color: var(--muted);
-      font-size: 10px; font-weight: 500; padding: 3px 7px;
-      cursor: pointer; transition: background .15s, color .15s;
+      font-size: 10px; font-weight: 600; padding: 3px 7px;
+      cursor: pointer; transition: all .15s;
       white-space: nowrap;
     }
-    .btn-matrix:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
+    .btn-matrix:hover { background: rgba(255,255,255,0.08); color: var(--fg); border-color: rgba(255,255,255,0.15); }
 
     /* Refresh countdown */
     .refresh-info {
       font-size: 9px; color: var(--muted); text-align: right;
-      padding: 2px 10px 0; font-family: var(--mono);
+      padding: 3px 10px 0; font-family: var(--mono);
+      opacity: 0.8;
     }
 
     /* ── Section label ── */
     .section-label {
       font-size: 10px; font-weight: 600; letter-spacing: .06em;
       text-transform: uppercase; color: var(--muted);
-      padding: 9px 12px 4px;
+      padding: 10px 12px 4px;
     }
 
     /* ── Current Account ── */
@@ -357,16 +385,21 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: var(--r);
-      padding: 10px 12px;
+      padding: 11px 12px;
+      transition: border-color .15s;
+    }
+    .current-account:hover {
+      border-color: rgba(255,255,255,0.12);
     }
     .acct-row { display: flex; align-items: flex-start; gap: 10px; }
     .avatar {
       width: 38px; height: 38px; border-radius: 50%;
       background: linear-gradient(135deg, #1a9e5c, #0e6b3e);
       display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 700; color: #fff;
+      font-size: 13px; font-weight: 700; color: #fff;
       flex-shrink: 0; text-transform: uppercase;
-      border: 2px solid rgba(26,158,92,0.4);
+      border: 2px solid rgba(26,158,92,0.45);
+      box-shadow: 0 0 10px rgba(26,158,92,0.3);
     }
     .acct-info { flex: 1; min-width: 0; }
     .acct-name {
@@ -377,7 +410,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     .acct-email {
       font-size: 10px; color: var(--muted);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      margin-bottom: 4px;
+      margin-bottom: 5px;
     }
     .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
     .badge {
@@ -396,16 +429,16 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       padding: 4px 10px; font-size: 10px; font-weight: 500;
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: var(--r-sm); color: var(--fg);
-      cursor: pointer; transition: background .15s;
+      cursor: pointer; transition: all .15s;
     }
-    .btn-reauth:hover { background: rgba(255,255,255,0.08); }
+    .btn-reauth:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
     .btn-signout {
       padding: 4px 10px; font-size: 10px; font-weight: 500;
       background: none; border: 1px solid rgba(229,57,53,0.35);
       border-radius: var(--r-sm); color: #ef9a9a;
-      cursor: pointer; transition: background .15s;
+      cursor: pointer; transition: all .15s;
     }
-    .btn-signout:hover { background: rgba(229,57,53,0.10); }
+    .btn-signout:hover { background: rgba(229,57,53,0.12); border-color: rgba(229,57,53,0.5); }
     .edit-acct-btn {
       background: none; border: none; cursor: pointer;
       color: var(--muted); font-size: 12px; padding: 2px 4px;
@@ -417,7 +450,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     /* Prediction bar */
     .prediction-bar {
       margin-top: 6px; padding: 6px 8px;
-      background: rgba(0,0,0,0.15); border-radius: var(--r-sm);
+      background: rgba(0,0,0,0.22); border-radius: var(--r-sm);
       border: 1px solid var(--border);
     }
     .pred-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
@@ -433,23 +466,35 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       padding: 8px 12px 4px;
     }
     .usage-label { font-size: 11px; font-weight: 600; }
-    .usage-controls { display: flex; align-items: center; gap: 4px; }
-    .usage-time { font-size: 10px; color: var(--muted); }
+    .usage-controls { display: flex; align-items: center; gap: 6px; }
+    .usage-time { font-size: 9px; color: var(--muted); }
+    .btn-text-action {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 10px; padding: 2px 4px;
+      border-radius: var(--r-sm); transition: color .15s;
+    }
+    .btn-text-action:hover { color: var(--fg); }
 
     /* Model list */
     .model-list { padding: 0 10px 4px; display: flex; flex-direction: column; gap: 5px; }
     .model-card {
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: var(--r); padding: 8px 10px;
+      transition: transform .15s, border-color .15s;
+    }
+    .model-card:hover {
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-1px);
     }
     .model-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-    .model-name { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+    .model-name { font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; min-width: 0; }
+    .model-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .trend-icon { font-size: 11px; }
     .trend-consuming { color: var(--error); }
     .trend-recovering { color: var(--accent); }
     .trend-stable     { color: var(--muted); }
     .trend-exhausted  { color: var(--error); }
-    .model-meta { display: flex; align-items: center; gap: 6px; }
+    .model-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     .model-pct {
       font-size: 13px; font-weight: 700; font-family: var(--mono);
     }
@@ -457,18 +502,35 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     .model-pct.warn { color: var(--warn); }
     .model-pct.crit { color: var(--error); }
     .model-countdown { font-size: 9px; color: var(--muted); font-family: var(--mono); }
+    
+    /* Pin button on model card */
+    .btn-pin {
+      background: none; border: none; cursor: pointer;
+      font-size: 11px; padding: 1px 4px; border-radius: var(--r-sm);
+      opacity: 0.45; transition: all .15s ease;
+      display: inline-flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    .btn-pin:hover { opacity: 1; background: rgba(255,255,255,0.08); }
+    .btn-pin.pinned {
+      opacity: 1;
+      background: rgba(167,139,250,0.18);
+      border: 1px solid rgba(167,139,250,0.4);
+      color: #a78bfa;
+    }
+
     .model-bar-track {
-      height: 3px; background: rgba(255,255,255,0.08);
-      border-radius: 2px; overflow: hidden; margin-bottom: 3px;
+      height: 4px; background: rgba(255,255,255,0.08);
+      border-radius: 2px; overflow: hidden; margin-bottom: 4px;
     }
     .model-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
-    .model-bar-fill.good { background: var(--accent); }
-    .model-bar-fill.warn { background: var(--warn); }
-    .model-bar-fill.crit { background: var(--error); }
+    .model-bar-fill.good { background: linear-gradient(90deg, #1a9e5c 0%, #2bd980 100%); }
+    .model-bar-fill.warn { background: linear-gradient(90deg, #d98200 0%, #ffb300 100%); }
+    .model-bar-fill.crit { background: linear-gradient(90deg, #d32f2f 0%, #ff5252 100%); }
     .model-details { display: flex; align-items: center; justify-content: space-between; }
     .model-window { font-size: 9px; color: var(--muted); }
     .model-reset  { font-size: 9px; color: var(--muted); font-family: var(--mono); }
-    .model-bucket { font-size: 9px; color: rgba(255,255,255,0.25); }
+    .model-bucket { font-size: 9px; color: rgba(255,255,255,0.28); }
     .weekly-tag {
       font-size: 8px; font-weight: 600; padding: 1px 4px;
       border-radius: 2px; background: var(--warn-bg); color: var(--warn);
@@ -481,7 +543,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     /* ── Saved accounts section ── */
     .saved-header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 12px 6px; cursor: pointer; user-select: none;
+      padding: 9px 12px 6px; cursor: pointer; user-select: none;
+      transition: background .15s;
     }
     .saved-header:hover { background: var(--surface2); }
     .saved-header-left { display: flex; align-items: center; gap: 6px; }
@@ -494,13 +557,13 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       border-radius: 3px; padding: 0 5px; color: var(--muted);
     }
     .saved-header-right { display: flex; align-items: center; gap: 4px; }
-    .btn-add {
+    .btn-header-action {
       background: none; border: none; cursor: pointer;
-      color: var(--muted); font-size: 15px; line-height: 1;
-      width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 13px; line-height: 1;
+      width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
       border-radius: var(--r-sm); transition: background .15s, color .15s;
     }
-    .btn-add:hover { background: var(--surface2); color: var(--fg); }
+    .btn-header-action:hover { background: var(--surface2); color: var(--fg); }
 
     .saved-body { padding: 0 10px; }
     .search-row { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -538,23 +601,29 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: var(--r); margin-bottom: 6px;
       border-left: 3px solid transparent;
-      transition: border-color .15s, background .15s;
+      transition: border-color .15s, background .15s, transform .15s;
     }
     .acct-card.active { border-left-color: var(--accent); }
     .acct-card.recommended { border-left-color: var(--purple); }
-    .acct-card:hover { background: rgba(255,255,255,0.05); }
+    .acct-card:hover {
+      background: rgba(255,255,255,0.06);
+      transform: translateY(-1px);
+    }
 
     .acct-card-head { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px 6px; }
     .card-avatar {
       width: 32px; height: 32px; border-radius: 50%;
-      background: linear-gradient(135deg, #555, #333);
+      background: linear-gradient(135deg, #444, #262626);
       display: flex; align-items: center; justify-content: center;
       font-size: 11px; font-weight: 700; color: #fff;
       flex-shrink: 0; text-transform: uppercase; position: relative;
     }
-    .card-avatar.active-acc { background: linear-gradient(135deg, #1a9e5c, #0e6b3e); }
+    .card-avatar.active-acc {
+      background: linear-gradient(135deg, #1a9e5c, #0e6b3e);
+      border: 1px solid rgba(26,158,92,0.4);
+    }
     .card-avatar.active-acc::after {
-      content: ''; position: absolute; bottom: 0; right: 0;
+      content: ''; position: absolute; bottom: -1px; right: -1px;
       width: 8px; height: 8px; border-radius: 50%;
       background: var(--accent); border: 2px solid var(--bg);
     }
@@ -596,9 +665,9 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     .cm-name   { font-size: 9px; color: var(--muted); width: 70px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cm-bar    { flex: 1; height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
     .cm-fill   { height: 100%; border-radius: 2px; }
-    .cm-fill.good { background: var(--accent); }
-    .cm-fill.warn { background: var(--warn); }
-    .cm-fill.crit { background: var(--error); }
+    .cm-fill.good { background: linear-gradient(90deg, #1a9e5c, #2bd980); }
+    .cm-fill.warn { background: linear-gradient(90deg, #d98200, #ffb300); }
+    .cm-fill.crit { background: linear-gradient(90deg, #d32f2f, #ff5252); }
     .cm-pct    { font-size: 9px; font-weight: 700; font-family: var(--mono); width: 30px; text-align: right; flex-shrink: 0; }
     .cm-pct.good { color: var(--accent); }
     .cm-pct.warn { color: var(--warn); }
@@ -611,9 +680,10 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       padding: 5px; background: var(--accent); color: #fff;
       border: none; border-radius: var(--r-sm); font-size: 10px;
       font-weight: 600; cursor: pointer; letter-spacing: .04em;
-      transition: opacity .15s;
+      transition: opacity .15s, transform .1s;
     }
-    .btn-switch-to:hover { opacity: .82; }
+    .btn-switch-to:hover { opacity: .88; }
+    .btn-switch-to:active { transform: scale(0.98); }
 
     /* Label editor */
     .label-editor {
@@ -663,27 +733,34 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
 
     /* ── Footer ── */
     .footer {
-      flex-shrink: 0; padding: 6px 10px;
+      flex-shrink: 0; padding: 7px 10px;
       border-top: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
+      background: rgba(0,0,0,0.06);
     }
-    .footer-left  { display: flex; align-items: center; gap: 6px; }
+    .footer-left  { display: flex; align-items: center; gap: 5px; }
     .footer-credit { font-size: 10px; color: var(--muted); }
     .footer-credit a { color: var(--blue); text-decoration: none; }
+    .footer-credit a:hover { text-decoration: underline; }
     .footer-version { font-size: 10px; color: var(--muted); font-family: var(--mono); }
-    .threshold-pill {
+    .pill-btn {
       font-size: 9px; font-weight: 600; padding: 2px 6px;
       border-radius: 3px; background: var(--surface2);
       border: 1px solid var(--border); color: var(--muted);
-      cursor: pointer; transition: all .15s;
+      cursor: pointer; transition: all .15s; white-space: nowrap;
     }
-    .threshold-pill:hover { border-color: var(--accent); color: var(--accent); }
+    .pill-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--fg); }
+    .pill-btn.active {
+      background: var(--accent-bg);
+      border-color: var(--accent-bd);
+      color: #4ade80;
+    }
 
     /* Animations */
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
     .pulsing { animation: pulse 2s infinite; }
-    @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:translateY(0)} }
     .fade-in { animation: fadeIn .2s ease; }
   </style>
 </head>
@@ -715,6 +792,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     <div class="usage-header">
       <span class="usage-label">Model Quotas</span>
       <div class="usage-controls">
+        <button class="btn-text-action" id="copyQuotaBtn" title="Copy quota summary to clipboard">📋 Copy</button>
         <span class="usage-time" id="usageTime"></span>
       </div>
     </div>
@@ -732,7 +810,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         <span class="saved-count" id="savedCount">0</span>
       </div>
       <div class="saved-header-right">
-        <button class="btn-add" id="addBtn" title="Add account">+</button>
+        <button class="btn-header-action" id="exportBtn" title="Export accounts backup (JSON)">📤</button>
+        <button class="btn-header-action" id="addBtn" title="Add / Switch account">+</button>
       </div>
     </div>
 
@@ -756,10 +835,11 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
   <!-- ── Footer ── -->
   <div class="footer">
     <div class="footer-left">
-      <span class="footer-credit">Developed by <a href="#">Kesicode</a></span>
-      <button class="threshold-pill" id="thresholdPill" title="Open settings to change threshold">⚠ —%</button>
+      <span class="footer-credit">Developed by <a href="https://github.com/Kesicode/AI-Quota" target="_blank">Kesicode</a></span>
+      <button class="pill-btn" id="thresholdPill" title="Open settings to change low quota alert threshold">⚠ 20%</button>
+      <button class="pill-btn" id="autoSwitchPill" title="Toggle automatic switching on low quota">⚡ Auto: OFF</button>
     </div>
-    <span class="footer-version" id="footerVersion">v2.0</span>
+    <span class="footer-version" id="footerVersion">v2.0.4</span>
   </div>
 
   <script nonce="${nonce}">
@@ -772,6 +852,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     let _privacy = false;
     let _threshold = 20;
     let _pollInterval = 30;
+    let _autoSwitch = false;
+    let _pinnedModel = '';
     let _lastRefresh = null;
     let _countdownTimer = null;
 
@@ -779,12 +861,29 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     document.getElementById('refreshBtn').onclick    = () => vscode.postMessage({ command: 'refresh' });
     document.getElementById('matrixBtn').onclick     = () => vscode.postMessage({ command: 'showMatrix' });
     document.getElementById('quickPickBtn').onclick  = () => vscode.postMessage({ command: 'showQuickPick' });
-    document.getElementById('addBtn').onclick        = () => vscode.postMessage({ command: 'switch' });
+    document.getElementById('addBtn').onclick        = (e) => { e.stopPropagation(); vscode.postMessage({ command: 'switch' }); };
+    document.getElementById('exportBtn').onclick     = (e) => { e.stopPropagation(); vscode.postMessage({ command: 'exportAccounts' }); };
     document.getElementById('privacyBtn').onclick    = () => vscode.postMessage({ command: 'togglePrivacy' });
     document.getElementById('thresholdPill').onclick = () => vscode.postMessage({ command: 'openSettings' });
+    document.getElementById('autoSwitchPill').onclick= () => vscode.postMessage({ command: 'toggleAutoSwitch' });
+
+    document.getElementById('copyQuotaBtn').onclick = () => {
+      const active = _accounts.find(a => a.status === 'live') || _accounts[0];
+      if (!active) return;
+      const name = active.label || active.display_name || active.email || 'Account';
+      let text = 'AI-Quota Status: [' + name + ' - ' + active.provider + ']\n';
+      text += 'Overall: ' + (active.best_remaining != null ? active.best_remaining.toFixed(0) + '%' : 'N/A') + '\n';
+      for (const s of (active.snapshots || [])) {
+        const wn = s.window_name || s.quota_bucket || 'Usage';
+        const pct = s.remaining_percent != null ? s.remaining_percent.toFixed(0) + '%' : '?';
+        const rst = s.reset_at ? fmtReset(s.reset_at) : '';
+        text += '  • ' + wn + ': ' + pct + (rst ? ' (' + rst + ')' : '') + '\n';
+      }
+      vscode.postMessage({ command: 'copyQuota', text });
+    };
 
     document.getElementById('savedToggle').onclick = (e) => {
-      if (e.target.closest('#addBtn')) return;
+      if (e.target.closest('#addBtn') || e.target.closest('#exportBtn')) return;
       _savedOpen = !_savedOpen;
       document.getElementById('savedBody').style.display = _savedOpen ? '' : 'none';
       const ch = document.getElementById('savedChevron');
@@ -844,7 +943,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     }
     function initials(name) {
       if (!name) return '?';
-      const parts = name.trim().split(/\s+/);
+      const parts = name.trim().split(/\\s+/);
       if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
       return name.slice(0,2).toUpperCase();
     }
@@ -859,7 +958,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     function providerLabel(p) {
       const MAP = {
         gemini:'Gemini', google:'Gemini', anthropic:'Claude', claude:'Claude',
-        openai:'GPT', gpt:'GPT', copilot:'Copilot', cursor:'Cursor',
+        openai:'GPT', gpt:'GPT', copilot:'Copilot', cursor:'Cursor', antigravity:'Antigravity',
       };
       if (!p) return 'Unknown';
       return MAP[p.toLowerCase()] || (p.charAt(0).toUpperCase() + p.slice(1));
@@ -885,7 +984,6 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       return pct.toFixed(0) + '%';
     }
     function isWeeklyLimited(snap) {
-      // Heuristic: if remaining_percent=0 and unit contains "week" or bucket contains "week"
       const b = (snap.quota_bucket || '').toLowerCase();
       const w = (snap.window_name || '').toLowerCase();
       return b.includes('week') || w.includes('week');
@@ -942,7 +1040,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
               \${hasWeekly ? '<span class="badge badge-weekly">⚠ Weekly limit</span>' : ''}
             </div>
             \${predHtml}
-            <div class="acct-btns" style="margin-top:6px">
+            <div class="acct-btns" style="margin-top:7px">
               <button class="btn-reauth" id="reauthBtn">Re-auth</button>
               <button class="btn-signout" id="signoutBtn">Sign out</button>
             </div>
@@ -984,7 +1082,10 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         const cntdn  = fmtCountdown(s.reset_at);
         const weekly = isWeeklyLimited(s);
 
-        // Trend from prediction if available and matches window
+        // Pin check
+        const isPinned = _pinnedModel && (_pinnedModel === s.window_name || _pinnedModel === s.quota_bucket);
+
+        // Trend from prediction if available
         const trend = pred && pred.window_name === s.window_name ? pred.trend : null;
         const tIcon = trendIcon(trend);
 
@@ -993,8 +1094,11 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         return \`<div class="model-card fade-in">
           <div class="model-header">
             <div class="model-name">
+              <button class="btn-pin \${isPinned ? 'pinned' : ''}" data-model="\${_esc(wname)}" title="\${isPinned ? 'Pinned to status bar (click to unpin)' : 'Pin this model to status bar'}">
+                \${isPinned ? '📌' : '📍'}
+              </button>
               \${tIcon}
-              \${_esc(wname)}
+              <span class="model-title-text">\${_esc(wname)}</span>
               \${weekly ? '<span class="weekly-tag">WEEKLY</span>' : ''}
             </div>
             <div class="model-meta">
@@ -1013,6 +1117,20 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           </div>
         </div>\`;
       }).join('');
+
+      // Wire pin buttons
+      list.querySelectorAll('.btn-pin').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const m = btn.dataset.model;
+          const isPinned = btn.classList.contains('pinned');
+          if (isPinned) {
+            vscode.postMessage({ command: 'unpinModel' });
+          } else {
+            vscode.postMessage({ command: 'pinModel', modelName: m });
+          }
+        });
+      });
     }
 
     // ── Render accounts list ────────────────────────────────────────────────
@@ -1048,7 +1166,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       const container = document.getElementById('accountsList');
       if (!sorted.length) {
         container.innerHTML = '<div class="empty">' +
-          (_searchQ ? 'No matching accounts.' : 'No accounts yet.<br>Add via Command Palette.') +
+          (_searchQ ? 'No matching accounts.' : 'No accounts yet.<br>Add via Command Palette or + button.') +
           '</div>';
         return;
       }
@@ -1174,14 +1292,11 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     function startCountdownTimer() {
       if (_countdownTimer) clearInterval(_countdownTimer);
       _countdownTimer = setInterval(() => {
-        // Update all model countdown spans in DOM directly
         const active = _accounts.find(a => a.status === 'live') || _accounts[0];
         if (!active) return;
-        // Re-render model list to update live countdowns
         renderModelList();
-        // Update refresh info
         updateRefreshInfo();
-      }, 10000); // Update every 10s for countdown accuracy
+      }, 10000);
     }
 
     function updateRefreshInfo() {
@@ -1214,8 +1329,12 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       privBtn.className = 'btn-icon' + (_privacy ? ' active' : '');
       privBtn.title = _privacy ? 'Privacy mode ON — click to show values' : 'Privacy mode OFF — click to hide values';
 
-      // Threshold pill
+      // Threshold & Auto-switch pills
       document.getElementById('thresholdPill').textContent = '⚠ Alert <' + _threshold + '%';
+      
+      const autoPill = document.getElementById('autoSwitchPill');
+      autoPill.textContent = _autoSwitch ? '⚡ Auto: ON' : '⚡ Auto: OFF';
+      autoPill.className = 'pill-btn' + (_autoSwitch ? ' active' : '');
 
       document.getElementById('offlineBanner').style.display = 'none';
       renderCurrentAccount();
@@ -1251,6 +1370,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         _privacy        = msg.privacyMode ?? false;
         _threshold      = msg.threshold ?? 20;
         _pollInterval   = msg.pollInterval ?? 30;
+        _autoSwitch     = msg.autoSwitch ?? false;
+        _pinnedModel    = msg.pinnedModel ?? '';
         _lastRefresh    = msg.lastRefresh ?? null;
         render();
       } else if (msg.type === 'error') {
