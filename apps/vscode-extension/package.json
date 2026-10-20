@@ -2,7 +2,7 @@
     "name": "ai-quota",
     "displayName": "AI-Quota",
     "description": "Universal AI Account & Quota Manager — monitor quotas, manage accounts, and switch between AI providers directly from your IDE.",
-    "version": "2.0.7",
+    "version": "2.0.8",
     "publisher": "Kesicode",
     "license": "MIT",
     "homepage": "https://github.com/Kesicode/AI-Quota#readme",
@@ -268,6 +268,11 @@
                     "type": "string",
                     "default": "http://127.0.0.1:8765",
                     "description": "URL of the AI-Quota local agent."
+                },
+                "ai-quota.backendDir": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Absolute path to the AI-Quota backend folder (where run.bat and app/main.py live). Leave empty to auto-detect from the extension install location."
                 },
                 "ai-quota.pollInterval": {
                     "type": "number",

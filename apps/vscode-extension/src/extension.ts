@@ -93,22 +93,60 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await fastRefresh();
   };
 
-  // Check if backend is running; attempt background auto-launch if not
-  try {
-    const isRunning = await agentClient.isAgentRunning();
-    if (!isRunning) {
-      const cp = await import("child_process");
-      const sub = cp.spawn("python", ["-m", "app.main"], {
-        cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || undefined,
-        detached: true,
-        stdio: "ignore",
-      });
-      sub.unref();
-      await new Promise((r) => setTimeout(r, 1500));
-    }
-  } catch {
-    // best-effort auto-launch
+  // ── Backend auto-launch + reconnect retry loop ────────────────────────────
+  // Resolve the backend directory: try config override, then known install paths
+  const cfg0 = vscode.workspace.getConfiguration("ai-quota");
+  const backendDirSetting = cfg0.get<string>("backendDir", "");
+
+  // Candidate directories where run.bat / app/main.py might live
+  const candidateDirs: string[] = [];
+  if (backendDirSetting) candidateDirs.push(backendDirSetting);
+
+  // Extension lives at: <install>/apps/vscode-extension  → go up 2 levels for repo root
+  const extPath = context.extensionUri.fsPath;
+  const path = await import("path");
+  const repoRoot = path.resolve(extPath, "..", "..");
+  candidateDirs.push(repoRoot);
+
+  // Also try workspace folders as a last resort
+  for (const wf of vscode.workspace.workspaceFolders ?? []) {
+    candidateDirs.push(wf.uri.fsPath);
   }
+
+  // Try to auto-launch the backend from the first valid directory
+  const tryLaunch = async (): Promise<void> => {
+    const cp = await import("child_process");
+    const fs = await import("fs");
+    for (const dir of candidateDirs) {
+      const runBat = path.join(dir, "run.bat");
+      const appMain = path.join(dir, "app", "main.py");
+      if (!fs.existsSync(appMain)) continue;
+      try {
+        // Windows: prefer run.bat which activates the venv automatically
+        const useRunBat = process.platform === "win32" && fs.existsSync(runBat);
+        const sub = useRunBat
+          ? cp.spawn("cmd.exe", ["/c", "run.bat"], { cwd: dir, detached: true, stdio: "ignore" })
+          : cp.spawn("python", ["-m", "app.main"],  { cwd: dir, detached: true, stdio: "ignore" });
+        sub.unref();
+        return; // launched OK
+      } catch { /* try next */ }
+    }
+  };
+
+  // Check health; if backend is offline try to start it then poll until it's up
+  const ensureBackend = async (): Promise<void> => {
+    const isRunning = await agentClient!.isAgentRunning();
+    if (!isRunning) {
+      await tryLaunch();
+      // Retry every 4s up to 15 times (~60s window)
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 4000));
+        if (await agentClient!.isAgentRunning()) break;
+      }
+    }
+  };
+
+  try { await ensureBackend(); } catch { /* best-effort */ }
 
   // Initial sync + refresh
   await slowSync();
