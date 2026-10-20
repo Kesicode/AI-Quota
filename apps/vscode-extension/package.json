@@ -2,7 +2,7 @@
     "name": "ai-quota",
     "displayName": "AI-Quota",
     "description": "Universal AI Account & Quota Manager — monitor quotas, manage accounts, and switch between AI providers directly from your IDE.",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "publisher": "Kesicode",
     "license": "MIT",
     "homepage": "https://github.com/Kesicode/AI-Quota#readme",

@@ -415,7 +415,16 @@ class Antigravity2Adapter(ProviderAdapter):
 
     @property
     def supported_clients(self) -> list[str]:
-        return ["Antigravity 2.0", "Antigravity Desktop"]
+        return ["Antigravity 2.0", "Antigravity Desktop", "Antigravity", "Antigravity IDE"]
+
+    def can_handle(self, provider: str, client: str) -> bool:
+        p = (provider or "").strip().lower()
+        c = (client or "").strip().lower()
+        if "cli" in c or "cli" in p:
+            return False
+        if any(sc.lower() in c or c in sc.lower() for sc in self.supported_clients if c):
+            return True
+        return "antigravity" in p or "antigravity" in c
 
     @property
     def truth(self) -> ProviderTruth:

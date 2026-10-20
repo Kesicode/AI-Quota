@@ -200,10 +200,16 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
+
+        case "addAccount": {
+          await vscode.commands.executeCommand("ai-quota.saveCurrentAccount");
+          break;
+        }
       }
     });
 
     this.refresh();
+    setTimeout(() => this.refresh(), 200);
   }
 
   async refresh(): Promise<void> {
@@ -331,6 +337,10 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       background: rgba(0,0,0,0.08);
     }
     .status-pill {
+      background: linear-gradient(135deg, rgba(26,158,92,0.15) 0%, rgba(26,158,92,0.05) 100%);
+      border: 1px solid rgba(26,158,92,0.3);
+      border-radius: 20px;
+      padding: 4px 12px 4px 8px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -346,8 +356,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       flex-shrink: 0;
       transition: all .2s;
     }
-    .status-dot.online  { background: var(--accent); box-shadow: 0 0 7px var(--accent); }
-    .status-dot.offline { background: rgba(255,255,255,0.25); }
+    .status-dot.online  { background: var(--accent); box-shadow: 0 0 8px rgba(26,158,92,0.8); animation: none; }
+    .status-dot.offline { background: var(--error); }
     .status-label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
     .status-label strong { color: var(--fg); font-weight: 600; }
 
@@ -383,9 +393,9 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
 
     /* ── Section label ── */
     .section-label {
-      font-size: 10px; font-weight: 600; letter-spacing: .06em;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
       text-transform: uppercase; color: var(--muted);
-      padding: 10px 12px 4px;
+      padding: 10px 14px 4px;
     }
 
     /* ── Current Account ── */
@@ -487,8 +497,10 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     /* Model list */
     .model-list { padding: 0 10px 4px; display: flex; flex-direction: column; gap: 5px; }
     .model-card {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 8px 10px;
+      background: linear-gradient(135deg, var(--surface) 0%, rgba(26,158,92,0.06) 100%);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 14px 12px;
+      margin: 6px 10px;
       transition: transform .15s, border-color .15s;
     }
     .model-card:hover {
@@ -532,8 +544,8 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       height: 4px; background: rgba(255,255,255,0.08);
       border-radius: 2px; overflow: hidden; margin-bottom: 4px;
     }
-    .model-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
-    .model-bar-fill.good { background: linear-gradient(90deg, #1a9e5c 0%, #2bd980 100%); }
+    .model-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+    .model-bar-fill.good { background: linear-gradient(90deg, rgba(26,158,92,0.7), rgba(26,158,92,1)); border-radius: 3px; height:100%; transition: width 0.5s ease; }
     .model-bar-fill.warn { background: linear-gradient(90deg, #d98200 0%, #ffb300 100%); }
     .model-bar-fill.crit { background: linear-gradient(90deg, #d32f2f 0%, #ff5252 100%); }
     .model-details { display: flex; align-items: center; justify-content: space-between; }
@@ -607,17 +619,20 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
 
     /* ── Account card ── */
     .acct-card {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--r); margin-bottom: 6px;
-      border-left: 3px solid transparent;
-      transition: border-color .15s, background .15s, transform .15s;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px; margin: 4px 10px;
+      cursor: pointer;
+      transition: all 0.15s ease;
     }
-    .acct-card.active { border-left-color: var(--accent); }
+    .acct-card.active { border-color: var(--accent-bd); background: linear-gradient(135deg, var(--surface) 0%, rgba(26,158,92,0.10) 100%); }
     .acct-card.recommended { border-left-color: var(--purple); }
     .acct-card:hover {
-      background: rgba(255,255,255,0.06);
+      border-color: rgba(26,158,92,0.4);
+      background: linear-gradient(135deg, var(--surface) 0%, rgba(26,158,92,0.06) 100%);
       transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
+    .acct-card.active .card-avatar { background: var(--accent); color: #fff; box-shadow: 0 0 0 3px rgba(26,158,92,0.3); }
 
     .acct-card-head { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px 6px; }
     .card-avatar {
@@ -742,11 +757,11 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
 
     /* ── Footer ── */
     .footer {
-      flex-shrink: 0; padding: 7px 10px;
+      flex-shrink: 0; padding: 8px 12px;
       border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
       display: flex; align-items: center; justify-content: space-between;
       gap: 6px;
-      background: rgba(0,0,0,0.06);
     }
     .footer-left  { display: flex; align-items: center; gap: 5px; }
     .footer-credit { font-size: 10px; color: var(--muted); }
@@ -848,7 +863,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
       <button class="pill-btn" id="thresholdPill" title="Open settings to change low quota alert threshold">⚠ 20%</button>
       <button class="pill-btn" id="autoSwitchPill" title="Toggle automatic switching on low quota">⚡ Auto: OFF</button>
     </div>
-    <span class="footer-version" id="footerVersion">v2.0.6</span>
+    <span class="footer-version" id="footerVersion">v2.0.7</span>
   </div>
 
   <script nonce="${nonce}">
@@ -870,7 +885,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
     document.getElementById('refreshBtn').onclick    = () => vscode.postMessage({ command: 'refresh' });
     document.getElementById('matrixBtn').onclick     = () => vscode.postMessage({ command: 'showMatrix' });
     document.getElementById('quickPickBtn').onclick  = () => vscode.postMessage({ command: 'showQuickPick' });
-    document.getElementById('addBtn').onclick        = (e) => { e.stopPropagation(); vscode.postMessage({ command: 'switch' }); };
+    document.getElementById('addBtn').onclick        = (e) => { e.stopPropagation(); vscode.postMessage({ command: 'addAccount' }); };
     document.getElementById('exportBtn').onclick     = (e) => { e.stopPropagation(); vscode.postMessage({ command: 'exportAccounts' }); };
     document.getElementById('privacyBtn').onclick    = () => vscode.postMessage({ command: 'togglePrivacy' });
     document.getElementById('thresholdPill').onclick = () => vscode.postMessage({ command: 'openSettings' });
@@ -1330,7 +1345,7 @@ export class QuotaSidebarProvider implements vscode.WebviewViewProvider {
         dot.className = 'status-dot online';
         txt.textContent = active
           ? (active.label || active.display_name || active.email || 'Connected')
-          : 'Ready';
+          : 'No live account';
       }
 
       // Privacy button state

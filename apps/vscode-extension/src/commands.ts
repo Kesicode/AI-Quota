@@ -39,7 +39,13 @@ export function registerAllCommands(
     }
 
     if (!accounts.length) {
-      vscode.window.showInformationMessage("AI-Quota: No accounts registered.");
+      const choice = await vscode.window.showInformationMessage(
+        "AI-Quota: No accounts registered yet. Add your first account?",
+        "Add Account"
+      );
+      if (choice === "Add Account") {
+        await vscode.commands.executeCommand("ai-quota.saveCurrentAccount");
+      }
       return;
     }
 
@@ -420,7 +426,13 @@ export function registerAllCommands(
     }
 
     if (!accounts.length) {
-      vscode.window.showInformationMessage("AI-Quota: No accounts registered.");
+      const choice = await vscode.window.showInformationMessage(
+        "AI-Quota: No accounts registered yet. Add your first account?",
+        "Add Account"
+      );
+      if (choice === "Add Account") {
+        await vscode.commands.executeCommand("ai-quota.saveCurrentAccount");
+      }
       return;
     }
 
